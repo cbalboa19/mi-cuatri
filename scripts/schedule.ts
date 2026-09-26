@@ -19,7 +19,7 @@ const PLAIN = 'local/schedule.json';
 const KEY_FILE = 'local/schedule.key';
 const ENC = 'src/config/schedule.enc.json';
 
-/** Clave legible tipo "k7mq-2xpa-9dhe" (~62 bits), sin caracteres que se confundan. */
+/** Clave legible tipo "k7mq-2xpa-9dhe" (12 caracteres de 31 posibles, ~59 bits), sin caracteres que se confundan. */
 function generatePassword(): string {
   const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
   const bytes = randomBytes(12);
