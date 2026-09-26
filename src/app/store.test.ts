@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { IdbRepository } from '../data/idb-repository';
+import { deriveKey, encryptWithKey, randomBytes } from '../domain/crypto';
 import { Store } from './store';
 
 const DAY = 86_400_000;
@@ -66,5 +67,38 @@ describe('Store', () => {
     expect(prep.summary).toBe('0 entrenos, 2 pesajes y 0 checklists');
     await prep.apply();
     expect(b.data.weights).toEqual({ '2026-10-01': 64, '2026-10-03': 64.3 });
+  });
+});
+
+describe('Store schedule', () => {
+  const week = [[{ start: '9:00', end: '10:00', label: 'Clase A', cat: 'clase' }], [], [], [], [], [], []];
+
+  async function encrypted(password: string) {
+    const salt = randomBytes(16);
+    return encryptWithKey({ labels: { ocio: 'Ocio' }, week }, await deriveKey(password, salt, 1000), salt, 1000);
+  }
+
+  it('stays locked until the right password is given, then remembers the key', async () => {
+    const enc = await encrypted('buena');
+    const name = `store-sched-${++n}`;
+    const repo = await IdbRepository.open(name);
+    const s = await Store.load(repo, (e) => { throw e; }, enc);
+    expect(s.schedule).toBeNull();
+    expect(await s.unlockSchedule('mala')).toBe(false);
+    expect(s.schedule).toBeNull();
+    expect(await s.unlockSchedule(' buena ')).toBe(true);
+    expect(s.schedule?.week[0]?.[0]?.label).toBe('Clase A');
+    repo.close();
+
+    // Al volver a abrir la app ya no pide la clave.
+    const repo2 = await IdbRepository.open(name);
+    const s2 = await Store.load(repo2, (e) => { throw e; }, enc);
+    expect(s2.schedule?.week[0]?.[0]?.label).toBe('Clase A');
+
+    // Si la clave del horario cambia, se vuelve a bloquear.
+    const s3 = await Store.load(repo2, (e) => { throw e; }, await encrypted('otra'));
+    expect(s3.schedule).toBeNull();
+    expect(await repo2.getScheduleKey()).toBeNull();
+    repo2.close();
   });
 });

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { WEEK } from '../config/schedule';
 import { studyMinutes, timelineState } from './timeline';
 import type { ScheduleBlock } from './types';
 
@@ -31,14 +30,16 @@ describe('timelineState', () => {
   });
 
   it('puts the line at the end once every block is over', () => {
-    const friday = WEEK[4]!;
-    expect(timelineState(friday, 23 * 60 + 45).pulseAt).toBe(friday.length);
+    const friday: ScheduleBlock[] = [
+      { start: '10:30', end: '12:30', label: 'Clase', cat: 'clase' },
+      { start: '16:30', end: '23:30', label: 'Ocio', cat: 'ocio' },
+    ];
+    expect(timelineState(friday, 23 * 60 + 45).pulseAt).toBe(2);
   });
 });
 
 describe('studyMinutes', () => {
   it('adds study blocks', () => {
     expect(studyMinutes(blocks)).toBe(60);
-    expect(studyMinutes(WEEK[0]!)).toBe(120 + 60 + 50 + 60);
   });
 });

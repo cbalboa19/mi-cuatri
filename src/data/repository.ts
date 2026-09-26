@@ -31,4 +31,8 @@ export interface Repository {
 
   getMeta(): Promise<DeviceMeta>;
   setMeta(meta: DeviceMeta): Promise<void>;
+
+  /** Clave (no exportable) que descifra el horario en este dispositivo. No va en el backup. */
+  getScheduleKey(): Promise<CryptoKey | null>;
+  setScheduleKey(key: CryptoKey | null): Promise<void>;
 }

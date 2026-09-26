@@ -17,7 +17,8 @@ import type { DeviceMeta, Repository } from './repository';
 type KvValue =
   | { key: 'settings'; value: SettingsRecord }
   | { key: 'active'; value: ActiveWorkout | null }
-  | { key: 'meta'; value: DeviceMeta };
+  | { key: 'meta'; value: DeviceMeta }
+  | { key: 'scheduleKey'; value: CryptoKey | null };
 
 interface MiCuatriDB extends DBSchema {
   checks: { key: string; value: CheckRecord };
@@ -119,6 +120,7 @@ export class IdbRepository implements Repository {
     const { data } = backup;
     const tx = this.db.transaction(DATA_STORES, 'readwrite');
     const meta = await tx.objectStore('kv').get('meta');
+    const scheduleKey = await tx.objectStore('kv').get('scheduleKey');
     await Promise.all(DATA_STORES.map((s) => tx.objectStore(s).clear()));
     const ops: Promise<unknown>[] = [
       ...data.checks.map((c) => tx.objectStore('checks').put(c)),
@@ -128,6 +130,7 @@ export class IdbRepository implements Repository {
       tx.objectStore('kv').put({ key: 'active', value: data.active }),
     ];
     if (meta) ops.push(tx.objectStore('kv').put(meta));
+    if (scheduleKey) ops.push(tx.objectStore('kv').put(scheduleKey));
     await Promise.all(ops);
     await tx.done;
   }
@@ -139,5 +142,14 @@ export class IdbRepository implements Repository {
 
   async setMeta(meta: DeviceMeta): Promise<void> {
     await this.db.put('kv', { key: 'meta', value: meta });
+  }
+
+  async getScheduleKey(): Promise<CryptoKey | null> {
+    const k = await this.db.get('kv', 'scheduleKey');
+    return k?.key === 'scheduleKey' ? k.value : null;
+  }
+
+  async setScheduleKey(key: CryptoKey | null): Promise<void> {
+    await this.db.put('kv', { key: 'scheduleKey', value: key });
   }
 }

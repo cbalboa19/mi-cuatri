@@ -1,9 +1,9 @@
 // Piezas de interfaz reutilizadas por varias vistas.
 
-import { CATEGORY_LABELS, WEEK } from '../config/schedule';
 import { countDone, isItemDone, resolveLabel, type ChecklistContext } from '../domain/checklists';
 import { minutesOfDay, pad } from '../domain/dates';
 import type { Phase } from '../domain/plan';
+import type { Schedule } from '../domain/schedule';
 import { timelineState } from '../domain/timeline';
 import type { ChecklistItem, CheckScope, DayIndex } from '../domain/types';
 import type { Store } from '../app/store';
@@ -19,8 +19,13 @@ export function phaseStrip(ph: Phase, extraTxt = '', style = ''): string {
   return `<div class="phase"${style ? ` style="${style}"` : ''}><span class="dot" style="background:${esc(ph.color)}"></span><div><b>${esc(ph.name)}</b><div class="sub">${esc(ph.txt)}${esc(extraTxt)}</div></div></div>`;
 }
 
-export function timeline(day: DayIndex, live: boolean, now: Date): string {
-  const blocks = WEEK[day] ?? [];
+/** Formulario para cargar el horario en el dispositivo (se pide la clave una sola vez). */
+export const scheduleLock = (): string =>
+  `<div class="list"><div class="empty">Introduce tu clave para cargar el horario en este dispositivo.</div><form class="field" data-unlock style="padding:0 14px 14px"><input id="schedKey" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Clave del horario" aria-label="Clave del horario"><button class="btn sm" type="submit">Desbloquear</button></form></div>`;
+
+export function timeline(schedule: Schedule | null, day: DayIndex, live: boolean, now: Date): string {
+  if (!schedule) return scheduleLock();
+  const blocks = schedule.week[day] ?? [];
   const n = minutesOfDay(now);
   const { states, pulseAt } = timelineState(blocks, live ? n : null);
   const pulse = `<div class="pulse"><em>${pad(Math.floor(n / 60))}:${pad(n % 60)}</em></div>`;
@@ -30,7 +35,7 @@ export function timeline(day: DayIndex, live: boolean, now: Date): string {
     const st = states[i];
     const cls = st === 'future' ? '' : st;
     const end = b.end === '24:00' ? '0:00' : b.end;
-    html += `<div class="blk ${cls}" style="--cat:var(--c-${b.cat})"><div class="t">${esc(b.start)}</div><div class="card">${cls === 'now' ? '<span class="nowtag">Ahora</span>' : ''}<b>${esc(b.label)}</b><span>${esc(b.start)} - ${esc(end)} · ${esc(CATEGORY_LABELS[b.cat])}</span></div></div>`;
+    html += `<div class="blk ${cls}" style="--cat:var(--c-${b.cat})"><div class="t">${esc(b.start)}</div><div class="card">${cls === 'now' ? '<span class="nowtag">Ahora</span>' : ''}<b>${esc(b.label)}</b><span>${esc(b.start)} - ${esc(end)} · ${esc(schedule.labels[b.cat])}</span></div></div>`;
   });
   if (pulseAt === blocks.length) html += pulse;
   return `<div class="tl">${html}</div>`;

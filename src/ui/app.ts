@@ -48,6 +48,7 @@ export class App {
     document.addEventListener('click', (e) => this.onClick(e));
     document.addEventListener('input', (e) => this.onInput(e));
     document.addEventListener('change', (e) => this.onChange(e));
+    document.addEventListener('submit', (e) => this.onSubmit(e));
     // Al volver a la app (o si queda abierta de un día para otro) se refresca todo.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') this.refresh();
@@ -133,6 +134,28 @@ export class App {
     const i = e.target as HTMLInputElement;
     if (!i.dataset.in || !this.store.active) return;
     this.store.setSetField(Number(i.dataset.e), Number(i.dataset.s), i.dataset.in as 'kg' | 'reps', i.value.replace(',', '.'));
+  }
+
+  private onSubmit(e: Event): void {
+    const form = e.target as HTMLFormElement;
+    if (!form.hasAttribute('data-unlock')) return;
+    e.preventDefault();
+    const input = form.querySelector<HTMLInputElement>('#schedKey');
+    const password = input?.value ?? '';
+    if (!password.trim()) return this.toast('Escribe la clave del horario');
+    input?.blur();
+    this.toast('Desbloqueando…');
+    this.store
+      .unlockSchedule(password)
+      .then((ok) => {
+        if (!ok) return this.toast('Clave incorrecta');
+        this.render();
+        this.toast('Horario cargado');
+      })
+      .catch((err) => {
+        console.error(err);
+        this.toast('No se ha podido desbloquear el horario');
+      });
   }
 
   private onChange(e: Event): void {

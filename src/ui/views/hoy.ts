@@ -22,6 +22,6 @@ export function renderHoy(store: Store, now: Date): string {
     phaseStrip(ph) +
     (gymBtn ? `<div style="margin-top:12px">${gymBtn}</div>` : '') +
     `<h2>Checklist de hoy · ${cl.done}/${cl.total}</h2>${cl.html}` +
-    `<h2>Tu día</h2>${timeline(w, true, now)}`
+    `<h2>Tu día</h2>${timeline(store.schedule, w, true, now)}`
   );
 }

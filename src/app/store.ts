@@ -2,6 +2,9 @@
 // desde aquí, de forma síncrona) y guarda en el repositorio en segundo plano.
 
 import { ROUTINES } from '../config/routines';
+import { CATEGORY_LABELS, ENCRYPTED_SCHEDULE } from '../config/schedule';
+import { decryptWithKey, decryptWithPassword, type EncryptedPayload } from '../domain/crypto';
+import { parseSchedulePayload, toSchedule, type Schedule } from '../domain/schedule';
 import { parseBackupText, backupFileName, type Backup } from '../domain/backup';
 import { phaseFor } from '../domain/plan';
 import type { ActiveWorkout, AppData, CheckScope, Workout } from '../domain/types';
@@ -20,17 +23,55 @@ export class Store {
   /** Se incrementa con cada cambio; sirve para saber si la exportación precalculada sigue valiendo. */
   private rev = 0;
   private exportCache: { rev: number; result: ExportResult } | null = null;
+  /** Horario descifrado; null mientras no se haya desbloqueado en este dispositivo. */
+  schedule: Schedule | null = null;
 
   constructor(
     private readonly repo: Repository,
     public data: AppData,
     public meta: DeviceMeta,
     private readonly onError: (e: unknown) => void,
+    private readonly encrypted: EncryptedPayload = ENCRYPTED_SCHEDULE,
   ) {}
 
-  static async load(repo: Repository, onError: (e: unknown) => void): Promise<Store> {
+  static async load(
+    repo: Repository,
+    onError: (e: unknown) => void,
+    encrypted: EncryptedPayload = ENCRYPTED_SCHEDULE,
+  ): Promise<Store> {
     const [data, meta] = await Promise.all([repo.load(), repo.getMeta()]);
-    return new Store(repo, data, meta, onError);
+    const store = new Store(repo, data, meta, onError, encrypted);
+    await store.loadSchedule();
+    return store;
+  }
+
+  // ---------- Horario ----------
+
+  /** Descifra el horario con la clave guardada en el dispositivo (si la hay y sigue valiendo). */
+  private async loadSchedule(): Promise<void> {
+    const key = await this.repo.getScheduleKey();
+    if (!key) return;
+    try {
+      this.schedule = toSchedule(parseSchedulePayload(await decryptWithKey(this.encrypted, key)), CATEGORY_LABELS);
+    } catch {
+      // La clave del horario ha cambiado: habrá que volver a escribirla.
+      this.schedule = null;
+      await this.repo.setScheduleKey(null);
+    }
+  }
+
+  /** Intenta desbloquear el horario con la contraseña. Devuelve false si no es correcta. */
+  async unlockSchedule(password: string): Promise<boolean> {
+    let result: { value: unknown; key: CryptoKey };
+    try {
+      result = await decryptWithPassword(this.encrypted, password.trim());
+    } catch {
+      return false;
+    }
+    this.schedule = toSchedule(parseSchedulePayload(result.value), CATEGORY_LABELS);
+    // Si no se pudiera guardar la clave, el horario sigue visible en esta sesión.
+    await this.repo.setScheduleKey(result.key).catch(this.onError);
+    return true;
   }
 
   get syncLabel(): string {
