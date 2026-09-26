@@ -3,10 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Mi cuatri</title>
 </head>
 <body>
 <main class="wrap" id="app"></main>
+<div class="rest" id="rest" role="timer" aria-live="polite">
+  <span>Descanso</span><span class="big" id="restT">0:00</span>
+  <button id="restMinus" aria-label="Restar 15 segundos">-15</button>
+  <button id="restPlus" aria-label="Sumar 15 segundos">+15</button>
+  <button id="restSkip">Saltar</button>
+</div>
+<div class="toast" id="toast"></div>
+<nav class="tabs" aria-label="Secciones"><div class="in" id="tabs"></div></nav>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
