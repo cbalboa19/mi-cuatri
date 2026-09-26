@@ -10,7 +10,17 @@ import type { DeviceMeta, Repository } from '../data/repository';
 
 export const BACKUP_REMINDER_DAYS = 7;
 
+export interface ExportResult {
+  name: string;
+  json: string;
+  backup: Backup;
+}
+
 export class Store {
+  /** Se incrementa con cada cambio; sirve para saber si la exportación precalculada sigue valiendo. */
+  private rev = 0;
+  private exportCache: { rev: number; result: ExportResult } | null = null;
+
   constructor(
     private readonly repo: Repository,
     public data: AppData,
@@ -31,6 +41,7 @@ export class Store {
   }
 
   private persist(p: Promise<unknown>): void {
+    this.rev++;
     p.catch(this.onError);
   }
 
@@ -158,9 +169,25 @@ export class Store {
     return days == null || days >= BACKUP_REMINDER_DAYS;
   }
 
-  async exportBackup(now: Date): Promise<{ name: string; json: string; backup: Backup }> {
+  async exportBackup(now: Date): Promise<ExportResult> {
     const backup = await this.repo.exportBackup(now);
     return { name: backupFileName(now), json: JSON.stringify(backup, null, 2), backup };
+  }
+
+  /**
+   * Prepara la exportación por adelantado. En iOS la hoja de compartir tiene que abrirse
+   * justo al pulsar el botón, sin esperas asíncronas de por medio.
+   */
+  async warmExport(): Promise<void> {
+    const rev = this.rev;
+    if (this.exportCache?.rev === rev) return;
+    const result = await this.exportBackup(new Date());
+    if (rev === this.rev) this.exportCache = { rev, result };
+  }
+
+  /** Exportación precalculada si sigue al día con los datos. */
+  cachedExport(): ExportResult | null {
+    return this.exportCache?.rev === this.rev ? this.exportCache.result : null;
   }
 
   async markExported(now: number): Promise<void> {
@@ -180,6 +207,7 @@ export class Store {
       apply: async () => {
         await this.repo.importBackup(r.backup);
         this.data = await this.repo.load();
+        this.rev++;
       },
     };
   }
