@@ -71,3 +71,9 @@ export async function decryptWithPassword(
   const key = await deriveKey(password, fromBase64(payload.salt), payload.iter);
   return { value: await decryptWithKey(payload, key), key };
 }
+
+/** Token de registro en el servidor de avisos, derivado de la clave (el servidor solo guarda su hash). */
+export async function notifyToken(password: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', enc.encode(`mi-cuatri-notify:${password.trim()}`));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
