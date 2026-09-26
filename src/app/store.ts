@@ -23,6 +23,8 @@ export class Store {
   /** Se incrementa con cada cambio; sirve para saber si la exportación precalculada sigue valiendo. */
   private rev = 0;
   private exportCache: { rev: number; result: ExportResult } | null = null;
+  /** Se llama tras cada cambio (urgent = afecta al descanso en curso). Lo usan las notificaciones. */
+  onChange: ((urgent: boolean) => void) | null = null;
   /** Horario descifrado; null mientras no se haya desbloqueado en este dispositivo. */
   schedule: Schedule | null = null;
 
@@ -71,6 +73,7 @@ export class Store {
     this.schedule = toSchedule(parseSchedulePayload(result.value), CATEGORY_LABELS);
     // Si no se pudiera guardar la clave, el horario sigue visible en esta sesión.
     await this.repo.setScheduleKey(result.key).catch(this.onError);
+    this.onChange?.(false);
     return true;
   }
 
@@ -81,9 +84,10 @@ export class Store {
     return this.repo.synced;
   }
 
-  private persist(p: Promise<unknown>): void {
+  private persist(p: Promise<unknown>, urgent = false): void {
     this.rev++;
     p.catch(this.onError);
+    this.onChange?.(urgent);
   }
 
   // ---------- Checklists y ajustes ----------
@@ -117,8 +121,8 @@ export class Store {
     return this.data.active;
   }
 
-  private saveActive(): void {
-    this.persist(this.repo.saveActiveWorkout(this.data.active));
+  private saveActive(urgent = false): void {
+    this.persist(this.repo.saveActiveWorkout(this.data.active), urgent);
   }
 
   startWorkout(routineId: string, now: Date): void {
@@ -161,7 +165,7 @@ export class Store {
   setRest(endsAt: number | null): void {
     if (!this.data.active || this.data.active.restEndsAt === endsAt) return;
     this.data.active.restEndsAt = endsAt;
-    this.saveActive();
+    this.saveActive(true);
   }
 
   /** Guarda el entreno en curso. Null si no hay ninguna serie marcada. */
@@ -173,13 +177,13 @@ export class Store {
     this.data.workouts.sort((a, b) => a.startedAt - b.startedAt);
     this.data.active = null;
     this.persist(this.repo.saveWorkout(w));
-    this.saveActive();
+    this.saveActive(true);
     return w;
   }
 
   discardWorkout(): void {
     this.data.active = null;
-    this.saveActive();
+    this.saveActive(true);
   }
 
   deleteWorkout(id: string): void {
@@ -234,6 +238,7 @@ export class Store {
   async markExported(now: number): Promise<void> {
     this.meta = { ...this.meta, lastExportAt: now };
     await this.repo.setMeta(this.meta);
+    this.onChange?.(false);
   }
 
   /** Valida el texto y, si es correcto, devuelve una función que aplica la importación. */
@@ -249,6 +254,7 @@ export class Store {
         await this.repo.importBackup(r.backup);
         this.data = await this.repo.load();
         this.rev++;
+        this.onChange?.(false);
       },
     };
   }

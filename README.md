@@ -13,4 +13,4 @@ npm run build   # build de producción
 
 ## Stack
 
-Vite + TypeScript, IndexedDB ([idb](https://github.com/jakearchibald/idb)), [vite-plugin-pwa](https://vite-pwa-org.netlify.app/) y [Vitest](https://vitest.dev/). Se despliega en GitHub Pages con GitHub Actions.
+Vite + TypeScript, IndexedDB ([idb](https://github.com/jakearchibald/idb)), [vite-plugin-pwa](https://vite-pwa-org.netlify.app/) y [Vitest](https://vitest.dev/). Se despliega en GitHub Pages con GitHub Actions. Las notificaciones push usan un pequeño Cloudflare Worker (`worker/`).

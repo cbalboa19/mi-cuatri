@@ -12,13 +12,14 @@ import {
   type WorkoutRecord,
 } from '../domain/backup';
 import type { ActiveWorkout, AppData, CheckScope, Settings, Workout } from '../domain/types';
-import type { DeviceMeta, Repository } from './repository';
+import type { DeviceMeta, NotifyState, Repository } from './repository';
 
 type KvValue =
   | { key: 'settings'; value: SettingsRecord }
   | { key: 'active'; value: ActiveWorkout | null }
   | { key: 'meta'; value: DeviceMeta }
-  | { key: 'scheduleKey'; value: CryptoKey | null };
+  | { key: 'scheduleKey'; value: CryptoKey | null }
+  | { key: 'notify'; value: NotifyState | null };
 
 interface MiCuatriDB extends DBSchema {
   checks: { key: string; value: CheckRecord };
@@ -121,6 +122,7 @@ export class IdbRepository implements Repository {
     const tx = this.db.transaction(DATA_STORES, 'readwrite');
     const meta = await tx.objectStore('kv').get('meta');
     const scheduleKey = await tx.objectStore('kv').get('scheduleKey');
+    const notify = await tx.objectStore('kv').get('notify');
     await Promise.all(DATA_STORES.map((s) => tx.objectStore(s).clear()));
     const ops: Promise<unknown>[] = [
       ...data.checks.map((c) => tx.objectStore('checks').put(c)),
@@ -131,6 +133,7 @@ export class IdbRepository implements Repository {
     ];
     if (meta) ops.push(tx.objectStore('kv').put(meta));
     if (scheduleKey) ops.push(tx.objectStore('kv').put(scheduleKey));
+    if (notify) ops.push(tx.objectStore('kv').put(notify));
     await Promise.all(ops);
     await tx.done;
   }
@@ -151,5 +154,14 @@ export class IdbRepository implements Repository {
 
   async setScheduleKey(key: CryptoKey | null): Promise<void> {
     await this.db.put('kv', { key: 'scheduleKey', value: key });
+  }
+
+  async getNotifyState(): Promise<NotifyState | null> {
+    const n = await this.db.get('kv', 'notify');
+    return n?.key === 'notify' ? n.value : null;
+  }
+
+  async setNotifyState(state: NotifyState | null): Promise<void> {
+    await this.db.put('kv', { key: 'notify', value: state });
   }
 }

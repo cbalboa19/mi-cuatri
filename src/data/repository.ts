@@ -2,11 +2,19 @@
 // (p. ej. Supabase) basta con otra implementación de Repository.
 
 import type { Backup } from '../domain/backup';
+import type { NotificationType } from '../config/notifications';
 import type { ActiveWorkout, AppData, CheckScope, Settings, Workout } from '../domain/types';
 
 /** Datos de este dispositivo que no forman parte del backup. */
 export interface DeviceMeta {
   lastExportAt: number | null;
+}
+
+/** Registro de este dispositivo en el servidor de avisos. No va en el backup. */
+export interface NotifyState {
+  deviceId: string;
+  secret: string;
+  disabled: Partial<Record<NotificationType, boolean>>;
 }
 
 export interface Repository {
@@ -35,4 +43,7 @@ export interface Repository {
   /** Clave (no exportable) que descifra el horario en este dispositivo. No va en el backup. */
   getScheduleKey(): Promise<CryptoKey | null>;
   setScheduleKey(key: CryptoKey | null): Promise<void>;
+
+  getNotifyState(): Promise<NotifyState | null>;
+  setNotifyState(state: NotifyState | null): Promise<void>;
 }

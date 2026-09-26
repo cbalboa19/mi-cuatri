@@ -16,6 +16,7 @@ Convenciones del proyecto "Mi cuatri" para futuras sesiones. Si existe `CLAUDE.l
 - `src/domain/`: lógica **pura** y testeada. Sin DOM ni almacenamiento. Cada módulo tiene su `*.test.ts` al lado.
 - `src/data/repository.ts`: interfaz de almacenamiento. `idb-repository.ts` es la implementación local. La UI y el store nunca tocan IndexedDB directamente.
 - `src/app/store.ts`: estado en memoria (`AppData`) + acciones. Actualiza la memoria de forma síncrona y persiste en segundo plano.
+- `src/app/notify.ts` + `src/domain/notifications.ts`: notificaciones. La app calcula los avisos de los próximos días y se los envía al worker (`worker/`, Cloudflare Worker + Durable Object) que los manda a su hora por Web Push.
 - `src/ui/`: vistas y componentes. Escapa siempre con `esc()` todo lo que venga de datos o config.
 
 ## Reglas importantes
