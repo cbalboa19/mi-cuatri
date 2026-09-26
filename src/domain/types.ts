@@ -1,5 +1,7 @@
 // Tipos compartidos entre config, dominio, datos y UI.
 
+import type { UserConfig } from './config';
+
 /** Categorías del horario. El color de cada una vive en CSS como `--c-<categoría>`. */
 export type Category =
   | 'clase'
@@ -41,10 +43,16 @@ export interface RoutineDef {
   /** Identificador estable. */
   id: string;
   name: string;
-  day: DayIndex;
+  /** Día de la semana (0 = lunes) o null si no tiene día fijo. */
+  day: DayIndex | null;
   desc: string;
+  /** ¿Se mantiene en modo exámenes? */
+  exam?: boolean;
   exercises: ExerciseDef[];
 }
+
+/** Qué checklist diaria usa cada tipo de día. */
+export type DayType = 'weekday' | 'friday' | 'saturday' | 'sunday';
 
 export type SetsRule =
   | { kind: 'full' }
@@ -113,6 +121,11 @@ export interface ActiveExercise {
   name: string;
   plannedSets: number;
   sets: ActiveSet[];
+  /** Copia de la definición al empezar (se puede cambiar durante el entreno). */
+  restSec?: number;
+  reps?: [number, number];
+  rir?: string;
+  incrementKg?: number;
 }
 
 export interface ActiveWorkout {
@@ -123,6 +136,9 @@ export interface ActiveWorkout {
   /** epoch ms en el que acaba el descanso en curso, o null. */
   restEndsAt: number | null;
   exercises: ActiveExercise[];
+  /** Si se está editando un entreno ya guardado: su id y su duración original. */
+  editOf?: string;
+  editDurationSec?: number;
 }
 
 /** Todo lo que la app necesita en memoria. */
@@ -133,10 +149,13 @@ export interface AppData {
   /** Ordenados por startedAt ascendente. */
   workouts: Workout[];
   active: ActiveWorkout | null;
+  /** Cambios de configuración hechos desde la app. */
+  config: UserConfig;
 }
 
 export function emptyAppData(): AppData {
   return {
+    config: {},
     settings: { examMode: false },
     checks: { daily: {}, weekly: {}, monthly: {} },
     weights: {},

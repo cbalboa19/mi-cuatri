@@ -19,7 +19,7 @@ export function renderGym(store: Store, now: Date): string {
     const isToday = todays?.id === r.id;
     const last = [...store.data.workouts].reverse().find((x) => x.routineId === r.id);
     const lastTxt = last ? ` · último: ${fmtDate(last.startedAt, { day: 'numeric', month: 'short' })}` : '';
-    return `<div class="rt ${isToday ? 'today' : ''}">${isToday ? '<span class="tag">Te toca hoy</span>' : ''}<h3>${DAY_NAMES[r.day]} · ${esc(r.name)}</h3><p>${esc(r.desc)} · ${r.exercises.length} ejercicios${esc(lastTxt)}</p><button class="btn ${isToday ? '' : 'ghost'}" data-start="${esc(r.id)}">Empezar rutina</button></div>`;
+    return `<div class="rt ${isToday ? 'today' : ''}">${isToday ? '<span class="tag">Te toca hoy</span>' : ''}<h3>${r.day != null ? `${DAY_NAMES[r.day]} · ` : ""}${esc(r.name)}</h3><p>${esc(r.desc)} · ${r.exercises.length} ejercicios${esc(lastTxt)}</p><button class="btn ${isToday ? '' : 'ghost'}" data-start="${esc(r.id)}">Empezar rutina</button></div>`;
   }).join('');
   return (
     header(store, 'Gym', `${weekWorkouts(store.data.workouts, now).length}/${weeklyGymTarget(exam)} entrenos esta semana`) +

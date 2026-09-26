@@ -3,6 +3,7 @@
 
 import type { Backup } from '../domain/backup';
 import type { NotificationType } from '../config/notifications';
+import type { UserConfig } from '../domain/config';
 import type { ActiveWorkout, AppData, CheckScope, Settings, Workout } from '../domain/types';
 
 /** Datos de este dispositivo que no forman parte del backup. */
@@ -32,6 +33,7 @@ export interface Repository {
   deleteWorkout(id: string): Promise<void>;
   saveActiveWorkout(active: ActiveWorkout | null): Promise<void>;
   saveSettings(settings: Settings): Promise<void>;
+  saveConfig(config: UserConfig): Promise<void>;
 
   exportBackup(now: Date): Promise<Backup>;
   /** Sustituye TODOS los datos por los del backup (ya validado). */

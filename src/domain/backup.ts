@@ -1,19 +1,27 @@
 // Formato de backup (JSON con versión de esquema), validación y migraciones.
 // Si cambias el formato: sube CURRENT_SCHEMA_VERSION y añade una migración en MIGRATIONS.
 
+import type { ChecklistsConfig, NotifyTimes, UserConfig } from './config';
+import { parseSchedulePayload } from './schedule';
 import type {
   ActiveExercise,
   ActiveSet,
   ActiveWorkout,
   AppData,
+  AutoKind,
+  ChecklistItem,
   CheckScope,
+  DayIndex,
+  DayType,
+  ExerciseDef,
+  RoutineDef,
   Settings,
   Workout,
   WorkoutExercise,
 } from './types';
 
 export const BACKUP_APP_ID = 'mi-cuatri';
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface CheckRecord {
   /** "daily:2026-09-28" | "weekly:2026-W40" | "monthly:2026-09" */
@@ -39,6 +47,7 @@ export interface BackupData {
   weights: WeightRecord[];
   workouts: WorkoutRecord[];
   active: ActiveWorkout | null;
+  config: UserConfig;
 }
 
 export interface Backup {
@@ -63,7 +72,7 @@ export function toAppData(data: BackupData): AppData {
   const workouts = data.workouts
     .map(({ updatedAt: _u, ...w }) => w)
     .sort((a, b) => a.startedAt - b.startedAt);
-  return { settings: { examMode: data.settings.examMode }, checks, weights, workouts, active: data.active };
+  return { settings: { examMode: data.settings.examMode }, checks, weights, workouts, active: data.active, config: data.config };
 }
 
 export const backupFileName = (now: Date): string =>
@@ -74,7 +83,10 @@ export const backupFileName = (now: Date): string =>
 type Migration = (data: unknown) => unknown;
 
 /** MIGRATIONS[n] convierte los datos de la versión n a la n + 1. */
-const MIGRATIONS: Record<number, Migration> = {};
+const MIGRATIONS: Record<number, Migration> = {
+  // v2: configuración editable desde la app.
+  1: (data) => ({ ...(data as object), config: {} }),
+};
 
 // ---------- Validación ----------
 
@@ -190,9 +202,121 @@ function vActive(v: unknown): ActiveWorkout | null {
         name: str(eo.name, `${ep}.name`),
         plannedSets: num(eo.plannedSets, `${ep}.plannedSets`),
         sets: arr(eo.sets, `${ep}.sets`).map((s, k) => vActiveSet(s, `${ep}.sets[${k}]`)),
+        ...(eo.restSec !== undefined ? { restSec: num(eo.restSec, `${ep}.restSec`) } : {}),
+        ...(eo.reps !== undefined ? { reps: vRange(eo.reps, `${ep}.reps`) } : {}),
+        ...(eo.rir !== undefined ? { rir: str(eo.rir, `${ep}.rir`) } : {}),
+        ...(eo.incrementKg !== undefined ? { incrementKg: num(eo.incrementKg, `${ep}.incrementKg`) } : {}),
       };
     }),
+    ...(o.editOf !== undefined ? { editOf: str(o.editOf, `${p}.editOf`) } : {}),
+    ...(o.editDurationSec !== undefined ? { editDurationSec: num(o.editDurationSec, `${p}.editDurationSec`) } : {}),
   };
+}
+
+function vRange(v: unknown, p: string): [number, number] {
+  const a = arr(v, p);
+  if (a.length !== 2) fail(p);
+  return [num(a[0], `${p}[0]`), num(a[1], `${p}[1]`)];
+}
+
+const AUTO_KINDS: AutoKind[] = ['daily-gym', 'daily-weight', 'weekly-gym', 'weekly-weights'];
+const DAY_TYPES: DayType[] = ['weekday', 'friday', 'saturday', 'sunday'];
+
+function vDay(v: unknown, p: string): DayIndex {
+  const n = num(v, p);
+  if (!Number.isInteger(n) || n < 0 || n > 6) fail(p);
+  return n as DayIndex;
+}
+
+function vItems(v: unknown, p: string): ChecklistItem[] {
+  return arr(v, p).map((it, i) => {
+    const o = obj(it, `${p}[${i}]`);
+    const item: ChecklistItem = { id: str(o.id, `${p}[${i}].id`), label: str(o.label, `${p}[${i}].label`) };
+    if (o.auto !== undefined) {
+      if (!AUTO_KINDS.includes(o.auto as AutoKind)) fail(`${p}[${i}].auto`);
+      item.auto = o.auto as AutoKind;
+    }
+    return item;
+  });
+}
+
+function vExercise(v: unknown, p: string): ExerciseDef {
+  const o = obj(v, p);
+  return {
+    id: str(o.id, `${p}.id`),
+    name: str(o.name, `${p}.name`),
+    sets: num(o.sets, `${p}.sets`),
+    reps: vRange(o.reps, `${p}.reps`),
+    rir: str(o.rir, `${p}.rir`),
+    restSec: num(o.restSec, `${p}.restSec`),
+    incrementKg: num(o.incrementKg, `${p}.incrementKg`),
+  };
+}
+
+function vRoutine(v: unknown, i: number): RoutineDef {
+  const p = `config.routines[${i}]`;
+  const o = obj(v, p);
+  return {
+    id: str(o.id, `${p}.id`),
+    name: str(o.name, `${p}.name`),
+    day: o.day === null ? null : vDay(o.day, `${p}.day`),
+    desc: str(o.desc, `${p}.desc`),
+    ...(o.exam !== undefined ? { exam: bool(o.exam, `${p}.exam`) } : {}),
+    exercises: arr(o.exercises, `${p}.exercises`).map((e, j) => vExercise(e, `${p}.exercises[${j}]`)),
+  };
+}
+
+function vChecklists(v: unknown): ChecklistsConfig {
+  const p = 'config.checklists';
+  const o = obj(v, p);
+  const d = obj(o.daily, `${p}.daily`);
+  const daily = Object.fromEntries(DAY_TYPES.map((t) => [t, vItems(d[t], `${p}.daily.${t}`)])) as Record<DayType, ChecklistItem[]>;
+  return {
+    daily,
+    weekly: vItems(o.weekly, `${p}.weekly`),
+    monthly: vItems(o.monthly, `${p}.monthly`),
+    weighDays: arr(o.weighDays, `${p}.weighDays`).map((x, i) => vDay(x, `${p}.weighDays[${i}]`)),
+  };
+}
+
+const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
+function vNotifyTimes(v: unknown): Partial<NotifyTimes> {
+  const p = 'config.notifyTimes';
+  const o = obj(v, p);
+  const out: Partial<NotifyTimes> = {};
+  for (const k of ['creatina', 'peso', 'planWeek', 'backup'] as const) {
+    if (o[k] === undefined) continue;
+    const t = str(o[k], `${p}.${k}`);
+    if (!TIME_RE.test(t)) fail(`${p}.${k}`);
+    out[k] = t;
+  }
+  for (const k of ['gymMinutesBefore', 'openWorkoutMinutes'] as const) {
+    if (o[k] !== undefined) out[k] = num(o[k], `${p}.${k}`);
+  }
+  return out;
+}
+
+function vConfig(v: unknown): UserConfig {
+  if (v === undefined || v === null) return {};
+  const o = obj(v, 'config');
+  const out: UserConfig = {};
+  if (o.routines !== undefined) out.routines = arr(o.routines, 'config.routines').map(vRoutine);
+  if (o.checklists !== undefined) out.checklists = vChecklists(o.checklists);
+  if (o.schedule !== undefined) {
+    try {
+      out.schedule = parseSchedulePayload(o.schedule);
+    } catch {
+      fail('config.schedule');
+    }
+  }
+  if (o.planStart !== undefined) {
+    const d = str(o.planStart, 'config.planStart');
+    if (!DATE_RE.test(d)) fail('config.planStart');
+    out.planStart = d;
+  }
+  if (o.notifyTimes !== undefined) out.notifyTimes = vNotifyTimes(o.notifyTimes);
+  return out;
 }
 
 function vData(v: unknown): BackupData {
@@ -203,6 +327,7 @@ function vData(v: unknown): BackupData {
     weights: arr(o.weights, 'weights').map(vWeight),
     workouts: arr(o.workouts, 'workouts').map(vWorkout),
     active: vActive(o.active),
+    config: vConfig(o.config),
   };
 }
 

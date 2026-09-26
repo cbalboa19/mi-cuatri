@@ -11,6 +11,7 @@ import {
   type WeightRecord,
   type WorkoutRecord,
 } from '../domain/backup';
+import type { UserConfig } from '../domain/config';
 import type { ActiveWorkout, AppData, CheckScope, Settings, Workout } from '../domain/types';
 import type { DeviceMeta, NotifyState, Repository } from './repository';
 
@@ -19,7 +20,8 @@ type KvValue =
   | { key: 'active'; value: ActiveWorkout | null }
   | { key: 'meta'; value: DeviceMeta }
   | { key: 'scheduleKey'; value: CryptoKey | null }
-  | { key: 'notify'; value: NotifyState | null };
+  | { key: 'notify'; value: NotifyState | null }
+  | { key: 'config'; value: UserConfig };
 
 interface MiCuatriDB extends DBSchema {
   checks: { key: string; value: CheckRecord };
@@ -64,12 +66,13 @@ export class IdbRepository implements Repository {
 
   private async readAll() {
     const tx = this.db.transaction(DATA_STORES, 'readonly');
-    const [checks, weights, workouts, settings, active] = await Promise.all([
+    const [checks, weights, workouts, settings, active, config] = await Promise.all([
       tx.objectStore('checks').getAll(),
       tx.objectStore('weights').getAll(),
       tx.objectStore('workouts').index('startedAt').getAll(),
       tx.objectStore('kv').get('settings'),
       tx.objectStore('kv').get('active'),
+      tx.objectStore('kv').get('config'),
     ]);
     await tx.done;
     return {
@@ -78,6 +81,7 @@ export class IdbRepository implements Repository {
       workouts,
       settings: settings?.key === 'settings' ? settings.value : DEFAULT_SETTINGS,
       active: active?.key === 'active' ? active.value : null,
+      config: config?.key === 'config' ? config.value : {},
     };
   }
 
@@ -109,6 +113,10 @@ export class IdbRepository implements Repository {
     await this.db.put('kv', { key: 'active', value: active });
   }
 
+  async saveConfig(config: UserConfig): Promise<void> {
+    await this.db.put('kv', { key: 'config', value: structuredClone(config) });
+  }
+
   async saveSettings(settings: Settings): Promise<void> {
     await this.db.put('kv', { key: 'settings', value: { ...settings, updatedAt: this.now() } });
   }
@@ -130,6 +138,7 @@ export class IdbRepository implements Repository {
       ...data.workouts.map((w) => tx.objectStore('workouts').put(w)),
       tx.objectStore('kv').put({ key: 'settings', value: data.settings }),
       tx.objectStore('kv').put({ key: 'active', value: data.active }),
+      tx.objectStore('kv').put({ key: 'config', value: data.config }),
     ];
     if (meta) ops.push(tx.objectStore('kv').put(meta));
     if (scheduleKey) ops.push(tx.objectStore('kv').put(scheduleKey));

@@ -40,6 +40,7 @@ describe('IdbRepository', () => {
       weights: {},
       workouts: [],
       active: null,
+      config: {},
     });
     expect(await r.getMeta()).toEqual({ lastExportAt: null });
     expect(r.syncLabel).toBe('Local');

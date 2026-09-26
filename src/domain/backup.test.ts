@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { backupFileName, buildBackup, parseBackup, parseBackupText, toAppData, type BackupData } from './backup';
 
 const data: BackupData = {
+  config: {},
   settings: { examMode: true, updatedAt: 5 },
   checks: [
     { id: 'daily:2026-09-28', scope: 'daily', period: '2026-09-28', items: { desayuno: true, agua: false }, updatedAt: 1 },
@@ -42,7 +43,7 @@ const now = new Date(2026, 9, 5, 10, 0);
 describe('backup', () => {
   it('round-trips through JSON', () => {
     const b = buildBackup(data, now);
-    expect(b).toMatchObject({ app: 'mi-cuatri', schemaVersion: 1, exportedAt: now.toISOString() });
+    expect(b).toMatchObject({ app: 'mi-cuatri', schemaVersion: 2, exportedAt: now.toISOString() });
     const r = parseBackupText(JSON.stringify(b));
     expect(r).toEqual({ ok: true, backup: b });
   });
@@ -102,6 +103,31 @@ describe('backup', () => {
     delete raw.data.active;
     const r = parseBackup(raw);
     expect(r.ok && r.backup.data.active).toBeNull();
+  });
+
+  it('migrates v1 backups (no config) to the current version', () => {
+    const v1 = JSON.parse(JSON.stringify(buildBackup(data, now)));
+    v1.schemaVersion = 1;
+    delete v1.data.config;
+    const r = parseBackup(v1);
+    expect(r.ok && r.backup.schemaVersion).toBe(2);
+    expect(r.ok && r.backup.data.config).toEqual({});
+  });
+
+  it('validates the user config', () => {
+    const withCfg = JSON.parse(JSON.stringify(buildBackup(data, now)));
+    withCfg.data.config = {
+      routines: [{ id: 'r1', name: 'Full body', day: null, desc: '', exam: true, exercises: [{ id: 'e1', name: 'Remo', sets: 3, reps: [8, 12], rir: '1', restSec: 90, incrementKg: 2.5 }] }],
+      planStart: '2026-10-05',
+      notifyTimes: { creatina: '22:00' },
+    };
+    const r = parseBackup(withCfg);
+    expect(r.ok && r.backup.data.config.routines?.[0]?.name).toBe('Full body');
+    withCfg.data.config.notifyTimes.creatina = '25:00';
+    expect(parseBackup(withCfg)).toMatchObject({ ok: false });
+    withCfg.data.config.notifyTimes.creatina = '22:00';
+    withCfg.data.config.routines[0].day = 9;
+    expect(parseBackup(withCfg)).toMatchObject({ ok: false });
   });
 
   it('names the file with the date', () => {

@@ -2,7 +2,7 @@
 
 import { adjustSets } from './plan';
 import { lastSessionFor } from './progression';
-import type { ActiveExercise, ActiveSet, ActiveWorkout, RoutineDef, SetsRule, Workout } from './types';
+import type { ActiveExercise, ActiveSet, ActiveWorkout, ExerciseDef, RoutineDef, SetsRule, Workout } from './types';
 
 /** "62,5" o "62.5" → 62.5. Vacío o inválido → NaN. */
 export const parseNum = (s: string): number => parseFloat(s.replace(',', '.'));
@@ -11,6 +11,24 @@ const numOrNull = (s: string): number | null => {
   const n = parseNum(s);
   return Number.isFinite(n) ? n : null;
 };
+
+/** Ejercicio listo para entrenar: series según la fase y valores de la última sesión. */
+export function createActiveExercise(def: ExerciseDef, history: Workout[], sets: number): ActiveExercise {
+  const last = lastSessionFor(def.id, history);
+  return {
+    exerciseId: def.id,
+    name: def.name,
+    plannedSets: sets,
+    restSec: def.restSec,
+    reps: [def.reps[0], def.reps[1]],
+    rir: def.rir,
+    incrementKg: def.incrementKg,
+    sets: Array.from({ length: Math.max(1, sets) }, (_, i): ActiveSet => {
+      const p = last ? (last.sets[i] ?? last.sets[last.sets.length - 1] ?? null) : null;
+      return { kg: '', reps: '', prevKg: p ? p.kg : null, prevReps: p ? p.reps : null, done: false };
+    }),
+  };
+}
 
 export function createActiveWorkout(
   routine: RoutineDef,
@@ -24,17 +42,38 @@ export function createActiveWorkout(
     routineName: routine.name,
     startedAt: now,
     restEndsAt: null,
-    exercises: routine.exercises.map((def) => {
-      const last = lastSessionFor(def.id, history);
-      const n = adjustSets(def.sets, setsRule);
+    exercises: routine.exercises.map((def) => createActiveExercise(def, history, adjustSets(def.sets, setsRule))),
+  };
+}
+
+/** Mueve un ejercicio del entreno una posición arriba (-1) o abajo (+1). */
+export function moveItem<T>(list: T[], index: number, dir: -1 | 1): void {
+  const j = index + dir;
+  if (index < 0 || j < 0 || index >= list.length || j >= list.length) return;
+  [list[index], list[j]] = [list[j]!, list[index]!];
+}
+
+/**
+ * Convierte un entreno guardado en uno editable (todas las series marcadas).
+ * `defs` da la configuración actual de cada ejercicio, si sigue existiendo.
+ */
+export function toEditable(w: Workout, defs: (exerciseId: string) => ExerciseDef | undefined): ActiveWorkout {
+  return {
+    id: w.id,
+    routineId: w.routineId,
+    routineName: w.routineName,
+    startedAt: w.startedAt,
+    restEndsAt: null,
+    editOf: w.id,
+    editDurationSec: w.durationSec,
+    exercises: w.exercises.map((ex) => {
+      const def = defs(ex.exerciseId);
       return {
-        exerciseId: def.id,
-        name: def.name,
-        plannedSets: n,
-        sets: Array.from({ length: n }, (_, i): ActiveSet => {
-          const p = last ? (last.sets[i] ?? last.sets[last.sets.length - 1] ?? null) : null;
-          return { kg: '', reps: '', prevKg: p ? p.kg : null, prevReps: p ? p.reps : null, done: false };
-        }),
+        exerciseId: ex.exerciseId,
+        name: ex.name,
+        plannedSets: ex.plannedSets,
+        ...(def ? { restSec: def.restSec, reps: [def.reps[0], def.reps[1]] as [number, number], rir: def.rir, incrementKg: def.incrementKg } : {}),
+        sets: ex.sets.map((s) => ({ kg: String(s.kg), reps: String(s.reps), prevKg: null, prevReps: null, done: true })),
       };
     }),
   };
@@ -92,7 +131,7 @@ export function finishWorkout(active: ActiveWorkout, now: number): Workout | nul
     routineId: active.routineId,
     routineName: active.routineName,
     startedAt: active.startedAt,
-    durationSec: Math.max(0, Math.floor((now - active.startedAt) / 1000)),
+    durationSec: active.editDurationSec ?? Math.max(0, Math.floor((now - active.startedAt) / 1000)),
     exercises,
   };
 }

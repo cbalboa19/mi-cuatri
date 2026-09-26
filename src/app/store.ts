@@ -1,14 +1,24 @@
 // Estado en memoria + acciones. Cada acción actualiza la memoria al momento (la UI se pinta
 // desde aquí, de forma síncrona) y guarda en el repositorio en segundo plano.
 
-import { ROUTINES } from '../config/routines';
 import { CATEGORY_LABELS, ENCRYPTED_SCHEDULE } from '../config/schedule';
 import { decryptWithKey, decryptWithPassword, type EncryptedPayload } from '../domain/crypto';
 import { parseSchedulePayload, toSchedule, type Schedule } from '../domain/schedule';
 import { parseBackupText, backupFileName, type Backup } from '../domain/backup';
-import { phaseFor } from '../domain/plan';
-import type { ActiveWorkout, AppData, CheckScope, Workout } from '../domain/types';
-import { addSet, createActiveWorkout, finishWorkout, removeSet, toggleSet, type ToggleResult } from '../domain/workout';
+import { resolveConfig, type Config, type UserConfig } from '../domain/config';
+import { adjustSets, phaseFor } from '../domain/plan';
+import type { ActiveWorkout, AppData, CheckScope, ExerciseDef, Workout } from '../domain/types';
+import {
+  addSet,
+  createActiveExercise,
+  createActiveWorkout,
+  finishWorkout,
+  moveItem,
+  removeSet,
+  toEditable,
+  toggleSet,
+  type ToggleResult,
+} from '../domain/workout';
 import type { DeviceMeta, Repository } from '../data/repository';
 
 export const BACKUP_REMINDER_DAYS = 7;
@@ -26,7 +36,8 @@ export class Store {
   /** Se llama tras cada cambio (urgent = afecta al descanso en curso). Lo usan las notificaciones. */
   onChange: ((urgent: boolean) => void) | null = null;
   /** Horario descifrado; null mientras no se haya desbloqueado en este dispositivo. */
-  schedule: Schedule | null = null;
+  private decryptedSchedule: Schedule | null = null;
+  private cfgCache: { src: UserConfig; cfg: Config } | null = null;
 
   constructor(
     private readonly repo: Repository,
@@ -47,17 +58,70 @@ export class Store {
     return store;
   }
 
+  // ---------- Configuración ----------
+
+  /** Configuración efectiva: valores por defecto + cambios del usuario. */
+  get cfg(): Config {
+    if (this.cfgCache?.src !== this.data.config) this.cfgCache = { src: this.data.config, cfg: resolveConfig(this.data.config) };
+    return this.cfgCache.cfg;
+  }
+
+  /**
+   * Cambia una sección de la configuración. `edit` recibe una copia de la configuración efectiva;
+   * las secciones indicadas en `sections` se guardan enteras como cambios del usuario.
+   */
+  updateConfig(sections: (keyof UserConfig)[], edit: (c: Config & { schedule: UserConfig['schedule'] }) => void): void {
+    const draft = { ...structuredClone(this.cfg), schedule: structuredClone(this.data.config.schedule ?? this.scheduleAsPayload()) };
+    edit(draft);
+    const next: UserConfig = { ...this.data.config };
+    for (const k of sections) (next as Record<string, unknown>)[k] = structuredClone(draft[k as keyof typeof draft]);
+    this.data.config = next;
+    this.persist(this.repo.saveConfig(next));
+  }
+
+  /** Vuelve a los valores por defecto de una sección. */
+  resetConfig(section: keyof UserConfig): void {
+    const next: UserConfig = { ...this.data.config };
+    delete next[section];
+    this.data.config = next;
+    this.persist(this.repo.saveConfig(next));
+  }
+
+  isCustomized(section: keyof UserConfig): boolean {
+    return this.data.config[section] !== undefined;
+  }
+
+  /** Definición de un ejercicio en cualquier rutina. */
+  findExercise(exerciseId: string): ExerciseDef | undefined {
+    for (const r of this.cfg.routines) {
+      const e = r.exercises.find((x) => x.id === exerciseId);
+      if (e) return e;
+    }
+    return undefined;
+  }
+
   // ---------- Horario ----------
+
+  /** Horario en uso: el editado en el dispositivo o, si no hay, el que viene con la app. */
+  get schedule(): Schedule | null {
+    const own = this.data.config.schedule;
+    return own ? toSchedule(own, CATEGORY_LABELS) : this.decryptedSchedule;
+  }
+
+  private scheduleAsPayload() {
+    const s = this.decryptedSchedule;
+    return s ? { labels: { ...s.labels }, week: structuredClone(s.week) } : undefined;
+  }
 
   /** Descifra el horario con la clave guardada en el dispositivo (si la hay y sigue valiendo). */
   private async loadSchedule(): Promise<void> {
     const key = await this.repo.getScheduleKey();
     if (!key) return;
     try {
-      this.schedule = toSchedule(parseSchedulePayload(await decryptWithKey(this.encrypted, key)), CATEGORY_LABELS);
+      this.decryptedSchedule = toSchedule(parseSchedulePayload(await decryptWithKey(this.encrypted, key)), CATEGORY_LABELS);
     } catch {
       // La clave del horario ha cambiado: habrá que volver a escribirla.
-      this.schedule = null;
+      this.decryptedSchedule = null;
       await this.repo.setScheduleKey(null);
     }
   }
@@ -70,7 +134,7 @@ export class Store {
     } catch {
       return false;
     }
-    this.schedule = toSchedule(parseSchedulePayload(result.value), CATEGORY_LABELS);
+    this.decryptedSchedule = toSchedule(parseSchedulePayload(result.value), CATEGORY_LABELS);
     // Si no se pudiera guardar la clave, el horario sigue visible en esta sesión.
     await this.repo.setScheduleKey(result.key).catch(this.onError);
     this.onChange?.(false);
@@ -125,12 +189,70 @@ export class Store {
     this.persist(this.repo.saveActiveWorkout(this.data.active), urgent);
   }
 
+  private phaseSets(now: Date) {
+    return phaseFor(now, this.data.settings.examMode, this.cfg.planStart).sets;
+  }
+
   startWorkout(routineId: string, now: Date): void {
-    const routine = ROUTINES.find((r) => r.id === routineId);
+    const routine = this.cfg.routines.find((r) => r.id === routineId);
     if (!routine) return;
-    const phase = phaseFor(now, this.data.settings.examMode);
-    this.data.active = createActiveWorkout(routine, this.data.workouts, phase.sets, now.getTime());
+    this.data.active = createActiveWorkout(routine, this.data.workouts, this.phaseSets(now), now.getTime());
     this.saveActive();
+  }
+
+  /** Abre un entreno guardado para corregirlo. False si hay otro entreno en curso. */
+  editWorkout(id: string): boolean {
+    if (this.data.active) return false;
+    const w = this.data.workouts.find((x) => x.id === id);
+    if (!w) return false;
+    this.data.active = toEditable(w, (exId) => this.findExercise(exId));
+    this.saveActive();
+    return true;
+  }
+
+  /** Descanso del ejercicio `ei` del entreno en curso (s). */
+  restFor(ei: number): number {
+    const ex = this.data.active?.exercises[ei];
+    return ex?.restSec ?? (ex ? this.findExercise(ex.exerciseId)?.restSec : undefined) ?? 90;
+  }
+
+  /** Añade un ejercicio al entreno en curso (y opcionalmente a su rutina). */
+  addExerciseToActive(def: ExerciseDef, sets: number, alsoToRoutine: boolean): void {
+    const active = this.data.active;
+    if (!active) return;
+    const n = active.editOf ? sets : adjustSets(sets, this.phaseSets(new Date()));
+    active.exercises.push(createActiveExercise(def, this.data.workouts, n));
+    this.saveActive();
+    if (alsoToRoutine && this.cfg.routines.some((r) => r.id === active.routineId)) {
+      this.updateConfig(['routines'], (c) => {
+        const r = c.routines.find((x) => x.id === active.routineId);
+        if (r && !r.exercises.some((e) => e.id === def.id)) r.exercises.push(structuredClone(def));
+      });
+    }
+  }
+
+  removeExerciseFromActive(ei: number): void {
+    this.data.active?.exercises.splice(ei, 1);
+    this.saveActive();
+  }
+
+  moveExerciseInActive(ei: number, dir: -1 | 1): void {
+    if (!this.data.active) return;
+    moveItem(this.data.active.exercises, ei, dir);
+    this.saveActive();
+  }
+
+  setExerciseRest(ei: number, restSec: number, alsoToRoutine: boolean): void {
+    const active = this.data.active;
+    const ex = active?.exercises[ei];
+    if (!active || !ex) return;
+    ex.restSec = restSec;
+    this.saveActive();
+    if (alsoToRoutine) {
+      this.updateConfig(['routines'], (c) => {
+        for (const r of c.routines) for (const e of r.exercises) if (e.id === ex.exerciseId) e.restSec = restSec;
+      });
+    }
   }
 
   setSetField(ei: number, si: number, field: 'kg' | 'reps', value: string): void {
@@ -173,6 +295,7 @@ export class Store {
     if (!this.data.active) return null;
     const w = finishWorkout(this.data.active, now);
     if (!w) return null;
+    this.data.workouts = this.data.workouts.filter((x) => x.id !== w.id);
     this.data.workouts.push(w);
     this.data.workouts.sort((a, b) => a.startedAt - b.startedAt);
     this.data.active = null;

@@ -2,10 +2,10 @@
 // los manda a su hora. Cada vez que cambian los datos se vuelve a calcular y se sustituye.
 
 import { NOTIFY, type NotificationType } from '../config/notifications';
-import { WEIGH_IN } from '../config/checklists';
 import { dailyItems, workoutsOnDay } from './checklists';
+import { DEFAULT_CONFIG, type Config } from './config';
 import { addDays, dow, pad, startOfDay, toMin, ymd } from './dates';
-import { routineForDay } from './plan';
+import { routinesForDay } from './plan';
 import type { Schedule } from './schedule';
 import type { AppData } from './types';
 
@@ -25,6 +25,7 @@ export interface PlanInput {
   lastExportAt: number | null;
   /** Tipos desactivados por el usuario (el resto están activos). */
   disabled?: Partial<Record<NotificationType, boolean>>;
+  cfg?: Config;
 }
 
 const WEEK_MS = 7 * 86_400_000;
@@ -44,7 +45,8 @@ function gymStart(schedule: Schedule | null, day: Date): string | null {
   return schedule?.week[dow(day)]?.find((b) => b.cat === 'gym')?.start ?? null;
 }
 
-export function planNotifications({ now, data, schedule, lastExportAt, disabled = {} }: PlanInput): PlannedNotification[] {
+export function planNotifications({ now, data, schedule, lastExportAt, disabled = {}, cfg = DEFAULT_CONFIG }: PlanInput): PlannedNotification[] {
+  const times = cfg.notifyTimes;
   const on = (t: NotificationType) => !disabled[t];
   const exam = data.settings.examMode;
   const hasData =
@@ -57,7 +59,7 @@ export function planNotifications({ now, data, schedule, lastExportAt, disabled 
     if (fireAt > now.getTime()) out.push({ id: `${type}:${key}`, type, fireAt, title, body });
   };
   const checked = (day: Date, item: string) => !!data.checks.daily[ymd(day)]?.[item];
-  const hasItem = (day: Date, item: string) => dailyItems(day, exam).some((i) => i.id === item);
+  const hasItem = (day: Date, item: string) => dailyItems(day, exam, cfg).some((i) => i.id === item);
 
   for (let i = 0; i < NOTIFY.horizonDays; i++) {
     const day = addDays(startOfDay(now), i);
@@ -65,27 +67,28 @@ export function planNotifications({ now, data, schedule, lastExportAt, disabled 
     const d = dow(day);
 
     if (on('creatina') && hasItem(day, NOTIFY.creatina.item) && !checked(day, NOTIFY.creatina.item)) {
-      add('creatina', key, at(day, NOTIFY.creatina.time), NOTIFY.creatina.title, NOTIFY.creatina.body);
+      add('creatina', key, at(day, times.creatina), NOTIFY.creatina.title, NOTIFY.creatina.body);
     }
 
-    if (on('peso') && WEIGH_IN.days.includes(d) && data.weights[key] == null) {
-      add('peso', key, at(day, NOTIFY.peso.time), NOTIFY.peso.title, NOTIFY.peso.body);
+    if (on('peso') && cfg.checklists.weighDays.includes(d) && data.weights[key] == null) {
+      add('peso', key, at(day, times.peso), NOTIFY.peso.title, NOTIFY.peso.body);
     }
 
-    const routine = routineForDay(d, exam);
-    const trainingNow = data.active != null && ymd(new Date(data.active.startedAt)) === key;
-    if (on('gym') && routine && workoutsOnDay(data.workouts, day).length === 0 && !trainingNow) {
+    const routines = routinesForDay(d, exam, cfg.routines);
+    const trainingNow = data.active != null && !data.active.editOf && ymd(new Date(data.active.startedAt)) === key;
+    if (on('gym') && routines.length && workoutsOnDay(data.workouts, day).length === 0 && !trainingNow) {
       const start = at(day, gymStart(schedule, day) ?? NOTIFY.gym.fallbackTime);
-      const fire = new Date(start.getTime() - NOTIFY.gym.minutesBefore * 60_000);
-      add('gym', key, fire, NOTIFY.gym.title, fill(NOTIFY.gym.body, { routine: routine.name, time: hhmm(start) }));
+      const fire = new Date(start.getTime() - times.gymMinutesBefore * 60_000);
+      const names = routines.map((r) => r.name).join(' + ');
+      add('gym', key, fire, NOTIFY.gym.title, fill(NOTIFY.gym.body, { routine: names, time: hhmm(start) }));
     }
 
     if (on('plan-week') && d === NOTIFY.planWeek.day && hasItem(day, NOTIFY.planWeek.item) && !checked(day, NOTIFY.planWeek.item)) {
-      add('plan-week', key, at(day, NOTIFY.planWeek.time), NOTIFY.planWeek.title, NOTIFY.planWeek.body);
+      add('plan-week', key, at(day, times.planWeek), NOTIFY.planWeek.title, NOTIFY.planWeek.body);
     }
 
     if (on('backup') && d === NOTIFY.backup.day && hasData) {
-      const fire = at(day, NOTIFY.backup.time);
+      const fire = at(day, times.backup);
       if (lastExportAt == null || fire.getTime() - lastExportAt >= WEEK_MS) {
         add('backup', key, fire, NOTIFY.backup.title, NOTIFY.backup.body);
       }
@@ -93,12 +96,12 @@ export function planNotifications({ now, data, schedule, lastExportAt, disabled 
   }
 
   const active = data.active;
-  if (active) {
+  if (active && !active.editOf) {
     if (on('open-workout')) {
       add(
         'open-workout',
         active.id,
-        active.startedAt + NOTIFY.openWorkout.afterMinutes * 60_000,
+        active.startedAt + times.openWorkoutMinutes * 60_000,
         NOTIFY.openWorkout.title,
         fill(NOTIFY.openWorkout.body, { routine: active.routineName }),
       );

@@ -1,23 +1,30 @@
 // Checklists: ítems de cada día, ítems automáticos y resúmenes.
 
-import { DAILY, DAY_TYPES, WEIGH_IN } from '../config/checklists';
+import { DAY_TYPES, WEIGH_IN } from '../config/checklists';
+import { DEFAULT_CONFIG, type Config } from './config';
 import { addDays, dow, mondayOf, monthKey, sameWeek, ymd } from './dates';
-import { routineForDay, weeklyGymTarget } from './plan';
+import { routinesForDay, weeklyGymTarget } from './plan';
 import { weekWeights } from './weight';
-import type { AutoKind, ChecklistItem, WeightMap, Workout } from './types';
+import type { AutoKind, ChecklistItem, DayType, WeightMap, Workout } from './types';
 
 export interface ChecklistContext {
   workouts: Workout[];
   weights: WeightMap;
   examMode: boolean;
+  cfg?: Config;
 }
 
-/** Checklist diaria de una fecha: según el tipo de día, con pesaje L-X-V y sin "entreno" si no toca. */
-export function dailyItems(date: Date, examMode: boolean): ChecklistItem[] {
+export const dayTypeOf = (date: Date): DayType => DAY_TYPES[dow(date)] ?? 'weekday';
+
+/** Checklist diaria de una fecha: según el tipo de día, con el pesaje y sin "entreno" si no toca. */
+export function dailyItems(date: Date, examMode: boolean, cfg: Config = DEFAULT_CONFIG): ChecklistItem[] {
   const d = dow(date);
-  const items = [...DAILY[DAY_TYPES[d] ?? 'weekday']];
-  if (WEIGH_IN.days.includes(d)) items.splice(WEIGH_IN.position, 0, WEIGH_IN.item);
-  if (!routineForDay(d, examMode)) return items.filter((i) => i.auto !== 'daily-gym');
+  const items = [...cfg.checklists.daily[dayTypeOf(date)]];
+  const hasWeigh = items.some((i) => i.auto === 'daily-weight');
+  if (cfg.checklists.weighDays.includes(d) && !hasWeigh) {
+    items.splice(Math.min(WEIGH_IN.position, items.length), 0, WEIGH_IN.item);
+  }
+  if (routinesForDay(d, examMode, cfg.routines).length === 0) return items.filter((i) => i.auto !== 'daily-gym');
   return items;
 }
 
@@ -31,15 +38,16 @@ export const workoutsOnDay = (workouts: Workout[], date: Date): Workout[] =>
   workouts.filter((w) => ymd(new Date(w.startedAt)) === ymd(date));
 
 export function isAutoDone(kind: AutoKind, date: Date, ctx: ChecklistContext): boolean {
+  const cfg = ctx.cfg ?? DEFAULT_CONFIG;
   switch (kind) {
     case 'daily-gym':
       return workoutsOnDay(ctx.workouts, date).length > 0;
     case 'daily-weight':
       return ctx.weights[ymd(date)] != null;
     case 'weekly-gym':
-      return weekWorkouts(ctx.workouts, date).length >= weeklyGymTarget(ctx.examMode);
+      return weekWorkouts(ctx.workouts, date).length >= weeklyGymTarget(ctx.examMode, cfg.routines);
     case 'weekly-weights':
-      return weekWeights(ctx.weights, date).length >= WEIGH_IN.days.length;
+      return weekWeights(ctx.weights, date).length >= cfg.checklists.weighDays.length;
   }
 }
 
@@ -52,8 +60,10 @@ export function isItemDone(
   return item.auto ? isAutoDone(item.auto, date, ctx) : !!record?.[item.id];
 }
 
-export const resolveLabel = (item: ChecklistItem, examMode: boolean): string =>
-  item.label.replaceAll('{gymTarget}', String(weeklyGymTarget(examMode)));
+export const resolveLabel = (item: ChecklistItem, examMode: boolean, cfg: Config = DEFAULT_CONFIG): string =>
+  item.label
+    .replaceAll('{gymTarget}', String(weeklyGymTarget(examMode, cfg.routines)))
+    .replaceAll('{weighTarget}', String(cfg.checklists.weighDays.length));
 
 export interface Count {
   done: number;
@@ -76,6 +86,7 @@ export interface WeekDailySummary {
   pct: number;
 }
 
+/** Resumen de la semana de `today`, contando solo hasta `today` (inclusive). */
 export function weekDailySummary(
   today: Date,
   daily: Record<string, Record<string, boolean>>,
@@ -92,7 +103,7 @@ export function weekDailySummary(
       continue;
     }
     const x = addDays(m, i);
-    const c = countDone(dailyItems(x, ctx.examMode), daily[ymd(x)], x, ctx);
+    const c = countDone(dailyItems(x, ctx.examMode, ctx.cfg), daily[ymd(x)], x, ctx);
     done += c.done;
     total += c.total;
     days.push(c);

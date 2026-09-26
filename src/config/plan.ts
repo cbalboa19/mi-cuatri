@@ -72,9 +72,6 @@ export const AFTER_END = {
   sets: { kind: 'full' } as SetsRule,
 };
 
-/** Entrenos objetivo por semana en fase normal. */
-export const WEEKLY_GYM_TARGET = 4;
-
 /** Modo exámenes (se activa a mano en Checks). */
 export const EXAM_MODE = {
   key: 'exam',
@@ -82,9 +79,8 @@ export const EXAM_MODE = {
   txt: '3 días × 45 min, 2 series por ejercicio. Mantienes lo ganado.',
   color: 'var(--warn)',
   sets: { kind: 'fixed', sets: 2 } as SetsRule,
-  /** Rutinas que se mantienen (cada una en su día habitual). */
+  /** Rutinas que se mantienen por defecto (se puede cambiar en cada rutina desde la app). */
   routineIds: ['torso-a', 'pierna-a', 'torso-b'],
-  weeklyGymTarget: 3,
 };
 
 /** Textos de ayuda de la pestaña Progreso. */
