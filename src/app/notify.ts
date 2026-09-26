@@ -138,6 +138,7 @@ export class NotifyClient {
         schedule: this.store.schedule,
         lastExportAt: this.store.meta.lastExportAt,
         disabled: this.state.disabled,
+        cfg: this.store.cfg,
       }).map(({ id, fireAt, title, body }) => ({ id, fireAt, title, body }));
       try {
         const res = await this.call('PUT', '/jobs', { jobs });

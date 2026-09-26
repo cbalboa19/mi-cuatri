@@ -1,16 +1,17 @@
 // Montaje de la interfaz: render, pestañas y eventos (delegación).
 
-import { dow, ymd } from '../domain/dates';
+import { newId } from '../domain/config';
+import { dayDiff, dow, parseYmd, ymd } from '../domain/dates';
 import { isValidWeight } from '../domain/weight';
 import { parseNum, workoutVolume } from '../domain/workout';
-import type { CheckScope } from '../domain/types';
+import type { CheckScope, ExerciseDef } from '../domain/types';
 import type { Store } from '../app/store';
 import { fmtClock, fmtDur, fmtNum } from './format';
 import { $ } from './html';
 import { RestTimer } from './rest-timer';
 import { initialUiState, saveTab, type TabKey, type UiState } from './state';
 import { renderChecks } from './views/checks';
-import { exerciseDef, renderGym } from './views/gym';
+import { renderGym } from './views/gym';
 import { renderHorario } from './views/horario';
 import { renderHoy } from './views/hoy';
 import { renderProgreso } from './views/progreso';
@@ -25,6 +26,10 @@ const TABS: [TabKey, string, string][] = [
 
 /** Secciones extra que se pintan al final de una pestaña (p. ej. Datos en Checks). */
 export type Extension = (store: Store, now: Date) => string;
+/** Pinta el editor abierto (ui.editor). */
+export type EditorRenderer = (store: Store, ui: UiState, now: Date) => string;
+
+const MAX_REST_SEC = 900;
 
 export class App {
   readonly ui: UiState;
@@ -32,6 +37,7 @@ export class App {
   private lastDay: string;
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly extensions: Partial<Record<TabKey, Extension[]>> = {};
+  private editorRenderer: EditorRenderer | null = null;
 
   constructor(readonly store: Store) {
     const now = new Date();
@@ -42,6 +48,10 @@ export class App {
 
   extend(tab: TabKey, ext: Extension): void {
     (this.extensions[tab] ??= []).push(ext);
+  }
+
+  setEditorRenderer(r: EditorRenderer): void {
+    this.editorRenderer = r;
   }
 
   start(): void {
@@ -55,7 +65,8 @@ export class App {
     });
     setInterval(() => this.tickClock(), 1000);
     setInterval(() => {
-      if (this.dayChanged() || ((this.ui.tab === 'hoy' || this.ui.tab === 'horario') && !this.editing())) this.render();
+      const live = (this.ui.tab === 'hoy' || this.ui.tab === 'horario') && !this.ui.editor;
+      if (this.dayChanged() || (live && !this.editing())) this.render();
     }, 60_000);
     this.render();
     this.rest.sync();
@@ -63,23 +74,22 @@ export class App {
 
   refresh(): void {
     this.dayChanged();
-    this.render();
+    if (!this.editing()) this.render();
     this.rest.sync();
   }
 
-  /** Si ha cambiado el día, el Horario vuelve a hoy. */
+  /** Si ha cambiado el día, las vistas vuelven a hoy. */
   private dayChanged(): boolean {
     const now = new Date();
     const today = ymd(now);
     if (today === this.lastDay) return false;
     this.lastDay = today;
-    this.ui.viewDay = dow(now);
-    this.ui.weightDate = null;
+    Object.assign(this.ui, { viewDay: dow(now), weightDate: null, dayOffset: 0, weekOffset: 0, monthOffset: 0 });
     return true;
   }
 
   private editing(): boolean {
-    return !!document.activeElement?.matches('input, select');
+    return !!document.activeElement?.matches('input, select, textarea');
   }
 
   toast(msg: string): void {
@@ -103,7 +113,7 @@ export class App {
     this.renderTabs(now);
     const { store, ui } = this;
     const views: Record<TabKey, () => string> = {
-      hoy: () => renderHoy(store, now),
+      hoy: () => renderHoy(store, ui, now),
       horario: () => renderHorario(store, ui, now),
       gym: () => renderGym(store, now),
       progreso: () => renderProgreso(store, ui, now),
@@ -111,8 +121,12 @@ export class App {
     };
     const a = document.activeElement as HTMLElement | null;
     const focusSel = a?.dataset?.in ? `[data-in="${a.dataset.in}"][data-e="${a.dataset.e}"][data-s="${a.dataset.s}"]` : null;
-    const extra = (this.extensions[ui.tab] ?? []).map((ext) => ext(store, now)).join('');
-    $('#app')!.innerHTML = views[ui.tab]() + extra;
+    if (ui.editor && this.editorRenderer) {
+      $('#app')!.innerHTML = this.editorRenderer(store, ui, now);
+    } else {
+      const extra = (this.extensions[ui.tab] ?? []).map((ext) => ext(store, now)).join('');
+      $('#app')!.innerHTML = views[ui.tab]() + extra;
+    }
     if (focusSel) $<HTMLInputElement>(focusSel)?.focus();
     this.tickClock();
   }
@@ -123,8 +137,9 @@ export class App {
     if (c && active) c.textContent = fmtClock(Math.floor((Date.now() - active.startedAt) / 1000));
   }
 
-  private goTab(tab: TabKey): void {
+  goTab(tab: TabKey): void {
     this.ui.tab = tab;
+    this.ui.editor = null;
     saveTab(tab);
     this.render();
     window.scrollTo(0, 0);
@@ -138,6 +153,7 @@ export class App {
 
   private onSubmit(e: Event): void {
     const form = e.target as HTMLFormElement;
+    if (form.hasAttribute('data-add-ex')) return this.onAddExercise(e, form);
     if (!form.hasAttribute('data-unlock')) return;
     e.preventDefault();
     const input = form.querySelector<HTMLInputElement>('#schedKey');
@@ -158,8 +174,37 @@ export class App {
       });
   }
 
+  /** Añade un ejercicio al entreno en curso (de una rutina o uno nuevo). */
+  private onAddExercise(e: Event, form: HTMLFormElement): void {
+    e.preventDefault();
+    const { store } = this;
+    const val = (sel: string) => form.querySelector<HTMLInputElement>(sel)?.value ?? '';
+    const chosen = val('#addExSel');
+    const name = val('#addExName').trim();
+    const sets = Math.round(parseNum(val('#addExSets')));
+    const rest = Math.round(parseNum(val('#addExRest')));
+    const save = form.querySelector<HTMLInputElement>('#addExSave')?.checked ?? false;
+    if (!(sets >= 1 && sets <= 10)) return this.toast('Series entre 1 y 10');
+    if (!(rest >= 0 && rest <= MAX_REST_SEC)) return this.toast(`Descanso entre 0 y ${MAX_REST_SEC} s`);
+    const base = chosen ? store.findExercise(chosen) : undefined;
+    if (!base && !name) return this.toast('Elige un ejercicio o escribe uno nuevo');
+    const def: ExerciseDef = base
+      ? { ...base, sets, restSec: rest }
+      : { id: newId('ex'), name, sets, reps: [8, 12], rir: '1-2', restSec: rest, incrementKg: 2.5 };
+    store.addExerciseToActive(def, sets, save);
+    this.render();
+    this.toast('Ejercicio añadido');
+  }
+
   private onChange(e: Event): void {
     const t = e.target as HTMLInputElement | HTMLSelectElement;
+    if (t.dataset.exrest != null) {
+      const v = Math.round(parseNum(t.value));
+      if (!(v >= 0 && v <= MAX_REST_SEC)) return this.toast(`Descanso entre 0 y ${MAX_REST_SEC} s`);
+      this.store.setExerciseRest(Number(t.dataset.exrest), v, false);
+      this.render();
+      return this.toast('Descanso cambiado para este entreno');
+    }
     if (t.id === 'exSel') {
       this.ui.progEx = t.value;
       this.render();
@@ -185,25 +230,18 @@ export class App {
       if (store.active && !confirm('Ya tienes un entreno en curso. ¿Descartarlo y empezar otro?')) return;
       store.startWorkout(ds.start, new Date());
       this.rest.sync();
-      this.ui.tab = 'gym';
-      saveTab('gym');
-      this.render();
-      window.scrollTo(0, 0);
-      return;
+      return this.goTab('gym');
     }
     if (t.hasAttribute('data-go-workout')) return this.goTab('gym');
 
+    // ---------- Entreno en curso ----------
     if (t.hasAttribute('data-tick')) {
       const ei = Number(ds.e), si = Number(ds.s);
       const r = store.toggleSet(ei, si);
       if (!r) return;
       if (!r.ok) return this.toast('Pon las repeticiones');
-      if (r.completed) {
-        const ex = store.active!.exercises[ei]!;
-        this.rest.start(exerciseDef(store.active!.routineId, ex.exerciseId, ex.name).restSec);
-      }
-      this.render();
-      return;
+      if (r.completed && !store.active!.editOf) this.rest.start(store.restFor(ei));
+      return this.render();
     }
     if (ds.addset != null) {
       store.addSet(Number(ds.addset));
@@ -213,25 +251,76 @@ export class App {
       store.removeSet(Number(ds.delset));
       return this.render();
     }
-    if (t.hasAttribute('data-finish')) {
-      const w = store.finishWorkout(Date.now());
-      if (!w) return this.toast('Marca al menos una serie');
-      this.rest.sync();
-      this.toast(`Entreno guardado · ${fmtDur(w.durationSec)} · ${fmtNum(Math.round(workoutVolume(w)))} kg`);
+    if (ds.exmove != null) {
+      store.moveExerciseInActive(Number(ds.exmove), ds.dir === '-1' ? -1 : 1);
       return this.render();
     }
-    if (t.hasAttribute('data-discard')) {
-      if (confirm('¿Descartar este entreno? No se guardará.')) {
-        store.discardWorkout();
-        this.rest.sync();
+    if (ds.exremove != null) {
+      const ex = store.active?.exercises[Number(ds.exremove)];
+      if (ex && confirm(`¿Quitar «${ex.name}» de este entreno?`)) {
+        store.removeExerciseFromActive(Number(ds.exremove));
         this.render();
       }
       return;
+    }
+    if (ds.exrestSave != null) {
+      const ei = Number(ds.exrestSave);
+      const v = Math.round(parseNum($<HTMLInputElement>(`[data-exrest="${ei}"]`)?.value ?? ''));
+      if (!(v >= 0 && v <= MAX_REST_SEC)) return this.toast(`Descanso entre 0 y ${MAX_REST_SEC} s`);
+      store.setExerciseRest(ei, v, true);
+      this.render();
+      return this.toast('Descanso guardado en la rutina');
+    }
+    if (t.hasAttribute('data-finish')) {
+      const editing = !!store.active?.editOf;
+      const w = store.finishWorkout(Date.now());
+      if (!w) return this.toast('Marca al menos una serie');
+      this.rest.sync();
+      this.toast(editing ? 'Cambios guardados' : `Entreno guardado · ${fmtDur(w.durationSec)} · ${fmtNum(Math.round(workoutVolume(w)))} kg`);
+      return editing ? this.goTab('progreso') : this.render();
+    }
+    if (t.hasAttribute('data-discard')) {
+      const editing = !!store.active?.editOf;
+      if (confirm(editing ? '¿Salir sin guardar los cambios?' : '¿Descartar este entreno? No se guardará.')) {
+        store.discardWorkout();
+        this.rest.sync();
+        if (editing) return this.goTab('progreso');
+        this.render();
+      }
+      return;
+    }
+    if (ds.editw) {
+      if (!store.editWorkout(ds.editw)) return this.toast('Termina o descarta primero el entreno en curso');
+      return this.goTab('gym');
+    }
+
+    // ---------- Navegación entre días, semanas y meses ----------
+    if (ds.daynav != null) {
+      this.ui.dayOffset = Math.min(0, this.ui.dayOffset + Number(ds.daynav));
+      return this.render();
+    }
+    if (t.hasAttribute('data-daynav-today')) {
+      this.ui.dayOffset = 0;
+      return this.render();
+    }
+    if (ds.weeknav != null) {
+      this.ui.weekOffset = Math.min(0, this.ui.weekOffset + Number(ds.weeknav));
+      return this.render();
+    }
+    if (ds.monthnav != null) {
+      this.ui.monthOffset = Math.min(0, this.ui.monthOffset + Number(ds.monthnav));
+      return this.render();
+    }
+    if (ds.openday) {
+      this.ui.dayOffset = Math.min(0, dayDiff(new Date(), parseYmd(ds.openday)));
+      return this.goTab('hoy');
     }
     if (ds.day != null) {
       this.ui.viewDay = Number(ds.day) as UiState['viewDay'];
       return this.render();
     }
+
+    // ---------- Checklists y ajustes ----------
     if (ds.chk) {
       const list = t.closest<HTMLElement>('.list');
       if (!list?.dataset.store || list.dataset.key == null) return;
@@ -250,11 +339,12 @@ export class App {
       this.render();
       return this.toast(store.data.settings.examMode ? 'Modo exámenes activado' : 'Modo exámenes desactivado');
     }
+
+    // ---------- Peso e historial ----------
     if (t.hasAttribute('data-addw')) {
       const v = parseNum($<HTMLInputElement>('#wIn')?.value ?? '');
       if (!isValidWeight(v)) return this.toast('Escribe tu peso en kg, p. ej. 64,5');
-      const date = this.ui.weightDate ?? ymd(new Date());
-      store.setWeight(date, v);
+      store.setWeight(this.ui.weightDate ?? ymd(new Date()), v);
       this.ui.weightDate = null;
       this.toast('Peso guardado');
       return this.render();

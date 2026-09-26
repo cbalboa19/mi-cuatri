@@ -5,6 +5,7 @@ import { Store } from './app/store';
 import { IdbRepository } from './data/idb-repository';
 import { App } from './ui/app';
 import { installBackupHandlers, renderDataSection } from './ui/backup';
+import { installEditorHandlers, renderEditor } from './ui/editors';
 import { installNotificationHandlers, renderNotificationsSection } from './ui/notifications';
 
 async function main(): Promise<void> {
@@ -20,6 +21,8 @@ async function main(): Promise<void> {
   app = new App(store);
   app.extend('checks', renderNotificationsSection(notify));
   app.extend('checks', renderDataSection);
+  app.setEditorRenderer((s, ui) => renderEditor(s, ui));
+  installEditorHandlers(app);
   installNotificationHandlers(app, notify);
   installBackupHandlers(app);
   app.start();

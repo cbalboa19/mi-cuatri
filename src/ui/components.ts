@@ -61,7 +61,7 @@ export function checklist(
     .map((item) => {
       const on = isItemDone(item, record, date, ctx);
       const data = item.auto ? `data-auto="${esc(item.auto)}"` : `data-chk="${esc(item.id)}"`;
-      return `<button class="item ${on ? 'done' : ''} ${item.auto ? 'auto' : ''}" ${data} aria-pressed="${on}"><span class="box"></span><span class="lbl">${esc(resolveLabel(item, ctx.examMode))}</span>${item.auto ? '<span class="hint">auto</span>' : ''}</button>`;
+      return `<button class="item ${on ? 'done' : ''} ${item.auto ? 'auto' : ''}" ${data} aria-pressed="${on}"><span class="box"></span><span class="lbl">${esc(resolveLabel(item, ctx.examMode, ctx.cfg))}</span>${item.auto ? '<span class="hint">auto</span>' : ''}</button>`;
     })
     .join('');
   const pct = total ? (done / total) * 100 : 0;
@@ -76,7 +76,20 @@ export const checklistCtx = (store: Store): ChecklistContext => ({
   workouts: store.data.workouts,
   weights: store.data.weights,
   examMode: store.data.settings.examMode,
+  cfg: store.cfg,
 });
+
+/** Título con flechas ‹ › a la derecha para moverse entre días (o semanas/meses). */
+export function navHeader(title: string, nav: string, prevDisabled: boolean, nextDisabled: boolean): string {
+  return `<div class="navh"><h2>${esc(title)}</h2><button class="navbtn" data-${nav}="-1" aria-label="Anterior" ${prevDisabled ? 'disabled' : ''}>‹</button><button class="navbtn" data-${nav}="1" aria-label="Siguiente" ${nextDisabled ? 'disabled' : ''}>›</button></div>`;
+}
+
+/** Enlace "Editar" que abre un editor. */
+export const editLink = (attrs: string, label = 'Editar'): string => `<button class="linkbtn" ${attrs}>${esc(label)}</button>`;
+
+/** Cabecera de un editor, con el botón Listo. */
+export const editorHeader = (title: string): string =>
+  `<div class="ehead" style="margin-top:8px"><h1 style="margin:0">${esc(title)}</h1><button class="btn sm" data-editor-done>Listo</button></div>`;
 
 export interface ChartPoint {
   x: number;

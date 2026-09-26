@@ -1,5 +1,4 @@
 import { WEIGHT_GOAL_TEXT } from '../../config/plan';
-import { ROUTINES } from '../../config/routines';
 import { parseYmd, ymd } from '../../domain/dates';
 import { bestE1rm, exerciseSessions, trackedExercises } from '../../domain/progression';
 import { movingAverage, weekAverages } from '../../domain/weight';
@@ -32,7 +31,7 @@ export function renderProgreso(store: Store, ui: UiState, now: Date): string {
     .join('');
 
   // Cargas por ejercicio
-  const exercises = trackedExercises(ROUTINES, workouts);
+  const exercises = trackedExercises(store.cfg.routines, workouts);
   if (!ui.progEx || !exercises.some((e) => e.id === ui.progEx)) ui.progEx = exercises[0]?.id ?? null;
   let exBlock = `<div class="list"><div class="empty">Cuando guardes tu primer entreno, aquí verás cómo evolucionan tus cargas.</div></div>`;
   if (ui.progEx) {
@@ -52,7 +51,7 @@ export function renderProgreso(store: Store, ui: UiState, now: Date): string {
   const hist = [...workouts]
     .reverse()
     .slice(0, 15)
-    .map((w) => `<div class="hist"><div><b>${esc(w.routineName)}</b><small>${esc(fmtDate(w.startedAt, { weekday: 'long', day: 'numeric', month: 'short' }))} · ${fmtDur(w.durationSec)} · ${fmtNum(Math.round(workoutVolume(w)))} kg</small></div><button class="btn sm ghost" data-delw="${esc(w.id)}" aria-label="Borrar entreno">Borrar</button></div>`)
+    .map((w) => `<div class="hist"><div><b>${esc(w.routineName)}</b><small>${esc(fmtDate(w.startedAt, { weekday: 'long', day: 'numeric', month: 'short' }))} · ${fmtDur(w.durationSec)} · ${fmtNum(Math.round(workoutVolume(w)))} kg</small></div><div class="row"><button class="btn sm ghost" data-editw="${esc(w.id)}" aria-label="Editar entreno">Editar</button><button class="btn sm ghost" data-delw="${esc(w.id)}" aria-label="Borrar entreno">Borrar</button></div></div>`)
     .join('');
 
   const placeholder = weights[wDate] != null ? String(weights[wDate]) : '64,0';

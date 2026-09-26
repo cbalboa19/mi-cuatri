@@ -150,3 +150,34 @@ nav.tabs .badge{position:absolute;top:7px;left:calc(50% + 7px);width:8px;height:
 /* sección Datos */
 .reminder{color:var(--warn);font-weight:600}
 .row .btn{flex:1}
+/* cabeceras con navegación (‹ día ›) y enlaces de edición */
+.navh{display:flex;align-items:center;gap:8px;margin:26px 0 10px}
+.navh h2{margin:0;flex:1;min-width:0}
+.navbtn{width:34px;height:34px;border-radius:11px;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;font-size:18px;font-weight:700;flex:none}
+.navbtn:disabled{opacity:.35}
+.linkbtn{font-size:14px;font-weight:600;color:var(--accent);padding:6px 2px;flex:none}
+.navrow{display:flex;align-items:center;gap:8px;margin-top:10px}
+.navrow span{flex:1;text-align:center;font-weight:600;font-size:14.5px}
+button.stat{width:100%;text-align:left;font:inherit}
+/* editores */
+.ehead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.erow{display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}
+.erow:first-child{border-top:0}
+.einput,.egrid input,.egrid select{min-width:0;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);font-size:16px;color:var(--ink);width:100%}
+.einput{flex:1}
+.eicon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--muted);font-size:15px;flex:none}
+.eicon.danger{color:#D93025}
+.egrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:10px}
+.egrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.egrid .full{grid-column:1/-1}
+.ehint{font-size:12px;color:var(--muted);padding:0 2px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:10px}
+.chips button{min-width:40px;padding:8px 10px;border-radius:11px;border:1px solid var(--line);background:var(--surface2);font-weight:600;font-size:14px}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.stack{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+/* opciones de cada ejercicio durante el entreno */
+.exopts{margin:4px 0 2px}
+.exopts summary{font-size:13px;font-weight:600;color:var(--muted);padding:6px 4px;cursor:pointer;list-style:none}
+.exopts summary::-webkit-details-marker{display:none}
+.exopts .row{flex-wrap:wrap;padding:4px 0 6px}
+.exopts input{width:80px;padding:8px;border-radius:9px;border:1px solid var(--line);background:var(--surface2);font-size:16px;text-align:center}
