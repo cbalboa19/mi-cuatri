@@ -12,7 +12,9 @@ Convenciones del proyecto "Mi cuatri" para futuras sesiones. Si existe `CLAUDE.l
 - No añadir dependencias sin justificarlo.
 
 ## Arquitectura
-- `src/config/`: datos editables (rutinas, checklists, plan; el horario se distribuye cifrado). Solo datos, sin lógica.
+- `src/config/`: valores por defecto (rutinas, checklists, plan; el horario se distribuye cifrado). Solo datos, sin lógica.
+- `src/domain/config.ts`: configuración efectiva = valores por defecto + `UserConfig` (lo que el usuario edita en la app; se guarda en IndexedDB y en el backup). Usa siempre `store.cfg`, no importes `ROUTINES`/`DAILY` directamente en la UI.
+- `src/ui/editors.ts`: editores de rutinas, checklists, horario y ajustes (se abren con `ui.editor`).
 - `src/domain/`: lógica **pura** y testeada. Sin DOM ni almacenamiento. Cada módulo tiene su `*.test.ts` al lado.
 - `src/data/repository.ts`: interfaz de almacenamiento. `idb-repository.ts` es la implementación local. La UI y el store nunca tocan IndexedDB directamente.
 - `src/app/store.ts`: estado en memoria (`AppData`) + acciones. Actualiza la memoria de forma síncrona y persiste en segundo plano.
@@ -20,7 +22,7 @@ Convenciones del proyecto "Mi cuatri" para futuras sesiones. Si existe `CLAUDE.l
 - `src/ui/`: vistas y componentes. Escapa siempre con `esc()` todo lo que venga de datos o config.
 
 ## Reglas importantes
-- **IDs estables**: los `id` de ejercicios, rutinas e ítems de checklist enlazan el historial. No cambiarlos al renombrar.
+- **IDs estables**: los `id` de ejercicios, rutinas e ítems de checklist enlazan el historial. No cambiarlos al renombrar. Los creados desde la app usan `newId()`.
 - **Fechas**: usa `src/domain/dates.ts`. Diferencias por días de calendario (`dayDiff`), nunca `ms / 864e5`: los cambios de hora (DST) desplazan semanas. Semana = lunes-domingo, `dow()` con lunes = 0.
 - **Backup**: si cambias `BackupData` o los registros, sube `CURRENT_SCHEMA_VERSION` en `src/domain/backup.ts`, añade la migración en `MIGRATIONS` y su test.
 - **IndexedDB**: si cambias los stores, sube `DB_VERSION` en `idb-repository.ts` y añade el paso en `upgrade`.
