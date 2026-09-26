@@ -17,3 +17,4 @@ npm-debug.log*
 reference/
 local/
 CLAUDE.local.md
+.wrangler/

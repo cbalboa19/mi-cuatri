@@ -1,0 +1,20 @@
+{
+  "name": "mi-cuatri-push",
+  "version": "0.1.0",
+  "description": "Avisos push de Mi cuatri (Cloudflare Worker)",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260926.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.141.0"
+  },
+  "private": true,
+  "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0"
+  }
+}
