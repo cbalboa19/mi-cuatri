@@ -3,6 +3,7 @@ import './styles/main.css';
 import { Store } from './app/store';
 import { IdbRepository } from './data/idb-repository';
 import { App } from './ui/app';
+import { installBackupHandlers, renderDataSection } from './ui/backup';
 
 async function main(): Promise<void> {
   let app: App | undefined;
@@ -13,7 +14,11 @@ async function main(): Promise<void> {
   const repo = await IdbRepository.open();
   const store = await Store.load(repo, onSaveError);
   app = new App(store);
+  app.extend('checks', renderDataSection);
+  installBackupHandlers(app);
   app.start();
+  // Pide al navegador que no borre los datos si falta espacio.
+  void navigator.storage?.persist?.().catch(() => {});
 }
 
 main().catch((e) => {
