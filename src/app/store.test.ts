@@ -102,3 +102,76 @@ describe('Store schedule', () => {
     repo2.close();
   });
 });
+
+describe('Store editable config', () => {
+  it('edits and resets routines, keeping defaults untouched', async () => {
+    const s = await makeStore();
+    expect(s.isCustomized('routines')).toBe(false);
+    s.updateConfig(['routines'], (c) => {
+      c.routines[0]!.name = 'Torso A+';
+      c.routines[0]!.exercises[0]!.restSec = 200;
+    });
+    expect(s.cfg.routines[0]?.name).toBe('Torso A+');
+    expect(s.findExercise('bench-press')?.restSec).toBe(200);
+    expect(s.isCustomized('routines')).toBe(true);
+    s.resetConfig('routines');
+    expect(s.cfg.routines[0]?.name).toBe('Torso A');
+    expect(s.findExercise('bench-press')?.restSec).toBe(180);
+  });
+
+  it('uses edited checklists and weigh days', async () => {
+    const s = await makeStore();
+    s.updateConfig(['checklists'], (c) => {
+      c.checklists.daily.saturday.push({ id: 'c_x', label: 'Leer 20 min' });
+      c.checklists.weighDays = [5];
+    });
+    expect(s.cfg.checklists.daily.saturday.at(-1)?.label).toBe('Leer 20 min');
+    expect(s.cfg.checklists.weighDays).toEqual([5]);
+  });
+
+  it('adds exercises during a workout, optionally to the routine, and changes rest', async () => {
+    const s = await makeStore();
+    s.startWorkout('torso-a', new Date(2026, 9, 12, 12));
+    const def = { id: 'ex_new', name: 'Pullover', sets: 3, reps: [10, 12] as [number, number], rir: '1', restSec: 75, incrementKg: 2.5 };
+    s.addExerciseToActive(def, 3, true);
+    expect(s.active?.exercises.at(-1)).toMatchObject({ exerciseId: 'ex_new', plannedSets: 3, restSec: 75 });
+    expect(s.cfg.routines.find((r) => r.id === 'torso-a')?.exercises.at(-1)?.id).toBe('ex_new');
+    const last = s.active!.exercises.length - 1;
+    s.setExerciseRest(last, 60, false);
+    expect(s.restFor(last)).toBe(60);
+    expect(s.findExercise('ex_new')?.restSec).toBe(75);
+    s.setExerciseRest(0, 150, true);
+    expect(s.findExercise('bench-press')?.restSec).toBe(150);
+    s.moveExerciseInActive(last, -1);
+    expect(s.active?.exercises.at(-2)?.exerciseId).toBe('ex_new');
+    s.removeExerciseFromActive(s.active!.exercises.length - 2);
+    expect(s.active?.exercises.some((e) => e.exerciseId === 'ex_new')).toBe(false);
+  });
+
+  it('edits a saved workout keeping its date and duration', async () => {
+    const s = await makeStore();
+    s.startWorkout('torso-a', new Date(2026, 9, 12, 12));
+    s.setSetField(0, 0, 'kg', '70');
+    s.setSetField(0, 0, 'reps', '8');
+    s.toggleSet(0, 0);
+    const w = s.finishWorkout(new Date(2026, 9, 12, 13).getTime())!;
+    expect(s.editWorkout(w.id)).toBe(true);
+    expect(s.active?.editOf).toBe(w.id);
+    s.setSetField(0, 0, 'kg', '72,5'.replace(',', '.'));
+    const edited = s.finishWorkout(Date.now())!;
+    expect(edited).toMatchObject({ id: w.id, startedAt: w.startedAt, durationSec: 3600 });
+    expect(edited.exercises[0]?.sets[0]).toEqual({ kg: 72.5, reps: 8 });
+    expect(s.data.workouts).toHaveLength(1);
+    // No se puede editar si hay un entreno en curso.
+    s.startWorkout('pierna-a', new Date());
+    expect(s.editWorkout(w.id)).toBe(false);
+  });
+
+  it('uses a schedule edited on the device over the bundled one', async () => {
+    const s = await makeStore();
+    expect(s.schedule).toBeNull();
+    s.data.config = { schedule: { week: [[{ start: '9:00', end: '10:00', label: 'Mío', cat: 'clase' }], [], [], [], [], [], []] } };
+    expect(s.schedule?.week[0]?.[0]?.label).toBe('Mío');
+    expect(s.schedule?.labels.clase).toBe('Clase');
+  });
+});
