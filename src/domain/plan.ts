@@ -1,6 +1,6 @@
 // Semana del plan, fase actual y series ajustadas por fase.
 
-import { AFTER_END, BEFORE_START, EXAM_MODE, PHASES, PLAN_START } from '../config/plan';
+import { AFTER_END, BEFORE_START, EXAM_MODE, PHASES } from '../config/plan';
 import { DEFAULT_CONFIG } from './config';
 import { dayDiff, dow, mondayOf, parseYmd } from './dates';
 import { DAY_NAMES, MONTH_NAMES } from './locale';
@@ -16,20 +16,29 @@ export interface Phase {
 }
 
 /** Semana del plan (1 = semana que empieza en `start`). ≤ 0 antes de empezar. */
-export function planWeek(date: Date, start: string = PLAN_START): number {
+export function planWeek(date: Date, start: string): number {
   return Math.floor(dayDiff(parseYmd(start), mondayOf(date)) / 7) + 1;
 }
 
 /** "lunes 28 de septiembre" */
-export function formatStart(start: string = PLAN_START): string {
+export function formatStart(start: string): string {
   const d = parseYmd(start);
   return `${DAY_NAMES[dow(d)].toLowerCase()} ${d.getDate()} de ${MONTH_NAMES[d.getMonth()]}`;
 }
 
-export function phaseFor(date: Date, examMode: boolean, start: string = PLAN_START): Phase {
+/** Sin plan por semanas (no hay fecha de inicio): no se muestra fase y las series no cambian. */
+export const NO_PHASE_KEY = 'none';
+
+/**
+ * Fase del plan. `start` = lunes de la semana 1 (null si no hay plan).
+ * `examDays` = rutinas que se mantienen en modo exámenes (para el texto).
+ */
+export function phaseFor(date: Date, examMode: boolean, start: string | null, examDays?: number): Phase {
   if (examMode) {
-    return { key: EXAM_MODE.key, name: EXAM_MODE.label, txt: EXAM_MODE.txt, color: EXAM_MODE.color, sets: EXAM_MODE.sets };
+    const txt = examDays ? EXAM_MODE.txt.replace('{days}', String(examDays)) : '2 series por ejercicio. Mantienes lo ganado.';
+    return { key: EXAM_MODE.key, name: EXAM_MODE.label, txt, color: EXAM_MODE.color, sets: EXAM_MODE.sets };
   }
+  if (!start) return { key: NO_PHASE_KEY, name: '', txt: '', color: '', sets: { kind: 'full' } };
   const w = planWeek(date, start);
   if (w < 1) {
     return {

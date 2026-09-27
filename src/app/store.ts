@@ -1,9 +1,10 @@
 // Estado en memoria + acciones. Cada acción actualiza la memoria al momento (la UI se pinta
 // desde aquí, de forma síncrona) y guarda en el repositorio en segundo plano.
 
-import { CATEGORY_LABELS, ENCRYPTED_SCHEDULE } from '../config/schedule';
+import { CATEGORY_LABELS, ENCRYPTED_PROFILE } from '../config/schedule';
 import { decryptWithKey, decryptWithPassword, type EncryptedPayload } from '../domain/crypto';
-import { parseSchedulePayload, toSchedule, type Schedule } from '../domain/schedule';
+import { parseProfilePayload, profileOf, type Profile } from '../domain/profile';
+import { toSchedule, type Schedule } from '../domain/schedule';
 import { parseBackupText, backupFileName, type Backup } from '../domain/backup';
 import { resolveConfig, type Config, type UserConfig } from '../domain/config';
 import { adjustSets, phaseFor } from '../domain/plan';
@@ -37,20 +38,22 @@ export class Store {
   onChange: ((urgent: boolean) => void) | null = null;
   /** Horario descifrado; null mientras no se haya desbloqueado en este dispositivo. */
   private decryptedSchedule: Schedule | null = null;
-  private cfgCache: { src: UserConfig; cfg: Config } | null = null;
+  /** Configuración propia del perfil cifrado (null si este dispositivo no tiene la clave). */
+  private profile: Profile | null = null;
+  private cfgCache: { src: UserConfig; profile: Profile | null; cfg: Config } | null = null;
 
   constructor(
     private readonly repo: Repository,
     public data: AppData,
     public meta: DeviceMeta,
     private readonly onError: (e: unknown) => void,
-    private readonly encrypted: EncryptedPayload = ENCRYPTED_SCHEDULE,
+    private readonly encrypted: EncryptedPayload = ENCRYPTED_PROFILE,
   ) {}
 
   static async load(
     repo: Repository,
     onError: (e: unknown) => void,
-    encrypted: EncryptedPayload = ENCRYPTED_SCHEDULE,
+    encrypted: EncryptedPayload = ENCRYPTED_PROFILE,
   ): Promise<Store> {
     const [data, meta] = await Promise.all([repo.load(), repo.getMeta()]);
     const store = new Store(repo, data, meta, onError, encrypted);
@@ -62,8 +65,11 @@ export class Store {
 
   /** Configuración efectiva: valores por defecto + cambios del usuario. */
   get cfg(): Config {
-    if (this.cfgCache?.src !== this.data.config) this.cfgCache = { src: this.data.config, cfg: resolveConfig(this.data.config) };
-    return this.cfgCache.cfg;
+    const c = this.cfgCache;
+    if (c?.src !== this.data.config || c.profile !== this.profile) {
+      this.cfgCache = { src: this.data.config, profile: this.profile, cfg: resolveConfig(this.data.config, this.profile) };
+    }
+    return this.cfgCache!.cfg;
   }
 
   /**
@@ -71,7 +77,10 @@ export class Store {
    * las secciones indicadas en `sections` se guardan enteras como cambios del usuario.
    */
   updateConfig(sections: (keyof UserConfig)[], edit: (c: Config & { schedule: UserConfig['schedule'] }) => void): void {
-    const draft = { ...structuredClone(this.cfg), schedule: structuredClone(this.data.config.schedule ?? this.scheduleAsPayload()) };
+    const draft = {
+      ...structuredClone(this.cfg),
+      schedule: structuredClone(this.data.config.schedule ?? this.scheduleAsPayload() ?? { week: [[], [], [], [], [], [], []] }),
+    };
     edit(draft);
     const next: UserConfig = { ...this.data.config };
     for (const k of sections) (next as Record<string, unknown>)[k] = structuredClone(draft[k as keyof typeof draft]);
@@ -100,6 +109,11 @@ export class Store {
     return undefined;
   }
 
+  /** ¿Este dispositivo tiene cargado el perfil (clave)? */
+  get hasProfile(): boolean {
+    return this.profile != null || this.decryptedSchedule != null;
+  }
+
   // ---------- Horario ----------
 
   /** Horario en uso: el editado en el dispositivo o, si no hay, el que viene con la app. */
@@ -113,16 +127,29 @@ export class Store {
     return s ? { labels: { ...s.labels }, week: structuredClone(s.week) } : undefined;
   }
 
-  /** Descifra el horario con la clave guardada en el dispositivo (si la hay y sigue valiendo). */
+  private applyProfile(value: unknown): void {
+    const payload = parseProfilePayload(value);
+    this.decryptedSchedule = toSchedule(payload, CATEGORY_LABELS);
+    this.profile = profileOf(payload);
+  }
+
+  /** Descifra el perfil con la clave guardada en el dispositivo (si la hay y sigue valiendo). */
   private async loadSchedule(): Promise<void> {
     const key = await this.repo.getScheduleKey();
     if (!key) return;
+    let value: unknown;
     try {
-      this.decryptedSchedule = toSchedule(parseSchedulePayload(await decryptWithKey(this.encrypted, key)), CATEGORY_LABELS);
+      value = await decryptWithKey(this.encrypted, key);
     } catch {
-      // La clave del horario ha cambiado: habrá que volver a escribirla.
-      this.decryptedSchedule = null;
+      // La clave ha cambiado: habrá que volver a escribirla.
       await this.repo.setScheduleKey(null);
+      return;
+    }
+    try {
+      this.applyProfile(value);
+    } catch (e) {
+      // Perfil con un formato inesperado: se ignora sin borrar la clave.
+      this.onError(e);
     }
   }
 
@@ -134,7 +161,7 @@ export class Store {
     } catch {
       return false;
     }
-    this.decryptedSchedule = toSchedule(parseSchedulePayload(result.value), CATEGORY_LABELS);
+    this.applyProfile(result.value);
     // Si no se pudiera guardar la clave, el horario sigue visible en esta sesión.
     await this.repo.setScheduleKey(result.key).catch(this.onError);
     this.onChange?.(false);
@@ -190,7 +217,13 @@ export class Store {
   }
 
   private phaseSets(now: Date) {
-    return phaseFor(now, this.data.settings.examMode, this.cfg.planStart).sets;
+    return this.phase(now).sets;
+  }
+
+  /** Fase del plan en una fecha (con el texto de modo exámenes ajustado a las rutinas). */
+  phase(now: Date) {
+    const examDays = this.cfg.routines.filter((r) => r.exam && r.day != null).length;
+    return phaseFor(now, this.data.settings.examMode, this.cfg.planStart, examDays);
   }
 
   startWorkout(routineId: string, now: Date): void {

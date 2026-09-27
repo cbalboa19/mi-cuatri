@@ -1,6 +1,6 @@
 {
   "name": "mi-cuatri",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Organizador del cuatrimestre (PWA)",
   "scripts": {
     "dev": "vite",
@@ -10,8 +10,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "generate-icons": "pwa-assets-generator",
-    "schedule:encrypt": "node scripts/schedule.ts encrypt",
-    "schedule:decrypt": "node scripts/schedule.ts decrypt"
+    "profile:encrypt": "node scripts/profile.ts encrypt",
+    "profile:decrypt": "node scripts/profile.ts decrypt"
   },
   "type": "module",
   "dependencies": {

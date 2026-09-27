@@ -1,10 +1,8 @@
-// Configuración efectiva: los valores por defecto de src/config/ con los cambios que el usuario
-// haya hecho desde la app (guardados en el dispositivo y en la copia de seguridad).
+// Configuración efectiva. Por defecto la app está vacía (sin rutinas ni checklists); encima van
+// el perfil cifrado (si el dispositivo tiene la clave) y los cambios hechos desde la app.
 
-import { DAILY, MONTHLY, WEEKLY, WEIGH_IN } from '../config/checklists';
 import { NOTIFY } from '../config/notifications';
-import { EXAM_MODE, PLAN_START } from '../config/plan';
-import { ROUTINES } from '../config/routines';
+import type { Profile } from './profile';
 import type { SchedulePayload } from './schedule';
 import type { ChecklistItem, DayIndex, DayType, RoutineDef } from './types';
 
@@ -29,29 +27,28 @@ export interface NotifyTimes {
 export interface UserConfig {
   routines?: RoutineDef[];
   checklists?: ChecklistsConfig;
-  /** Horario editado en el dispositivo (sustituye al que viene con la app). */
+  /** Horario editado en el dispositivo (sustituye al del perfil). */
   schedule?: SchedulePayload;
-  planStart?: string;
+  /** Lunes de la semana 1 del plan; null = sin plan por semanas. */
+  planStart?: string | null;
   notifyTimes?: Partial<NotifyTimes>;
 }
 
 export interface Config {
   routines: RoutineDef[];
   checklists: ChecklistsConfig;
-  planStart: string;
+  planStart: string | null;
   notifyTimes: NotifyTimes;
+  weightGoal: string | null;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
 
-export const defaultRoutines = (): RoutineDef[] =>
-  ROUTINES.map((r) => ({ ...clone(r), exam: r.exam ?? EXAM_MODE.routineIds.includes(r.id) }));
-
-export const defaultChecklists = (): ChecklistsConfig => ({
-  daily: clone(DAILY),
-  weekly: clone(WEEKLY),
-  monthly: clone(MONTHLY),
-  weighDays: [...WEIGH_IN.days],
+export const emptyChecklists = (): ChecklistsConfig => ({
+  daily: { weekday: [], friday: [], saturday: [], sunday: [] },
+  weekly: [],
+  monthly: [],
+  weighDays: [],
 });
 
 export const defaultNotifyTimes = (): NotifyTimes => ({
@@ -63,15 +60,18 @@ export const defaultNotifyTimes = (): NotifyTimes => ({
   openWorkoutMinutes: NOTIFY.openWorkout.afterMinutes,
 });
 
-export function resolveConfig(user: UserConfig = {}): Config {
+/** Cambios del usuario > perfil (si hay clave) > app vacía. */
+export function resolveConfig(user: UserConfig = {}, profile: Profile | null = null): Config {
   return {
-    routines: user.routines ?? defaultRoutines(),
-    checklists: user.checklists ?? defaultChecklists(),
-    planStart: user.planStart ?? PLAN_START,
+    routines: user.routines ?? (profile?.routines ? clone(profile.routines) : []),
+    checklists: user.checklists ?? (profile?.checklists ? clone(profile.checklists) : emptyChecklists()),
+    planStart: user.planStart !== undefined ? user.planStart : (profile?.planStart ?? null),
     notifyTimes: { ...defaultNotifyTimes(), ...user.notifyTimes },
+    weightGoal: profile?.weightGoal ?? null,
   };
 }
 
+/** Configuración de una app recién instalada, sin perfil. */
 export const DEFAULT_CONFIG: Config = resolveConfig();
 
 /** Identificador nuevo para ítems, ejercicios o rutinas creados desde la app. */

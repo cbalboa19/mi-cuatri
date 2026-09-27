@@ -1,14 +1,14 @@
 import type { EncryptedPayload } from '../domain/crypto';
 import type { Category } from '../domain/types';
-import encrypted from './schedule.enc.json';
+import encrypted from './profile.enc.json';
 
-// El horario se distribuye cifrado (schedule.enc.json) y se desbloquea una vez en cada dispositivo.
-// Se genera con `npm run schedule:encrypt`.
-// Los colores de cada categoría están en src/styles/main.css (--c-clase, --c-gym, ...).
+// Perfil cifrado (horario + configuración propia): se desbloquea una vez en cada dispositivo.
+// Se genera con `npm run profile:encrypt`.
+// Los colores de cada categoría del horario están en src/styles/main.css (--c-clase, --c-gym, ...).
 
-export const ENCRYPTED_SCHEDULE = encrypted as EncryptedPayload;
+export const ENCRYPTED_PROFILE = encrypted as EncryptedPayload;
 
-/** Nombres por defecto de las categorías. El horario puede sustituirlos (campo `labels`). */
+/** Nombres por defecto de las categorías del horario. El perfil puede sustituirlos (campo `labels`). */
 export const CATEGORY_LABELS: Record<Category, string> = {
   clase: 'Clase',
   lab: 'Laboratorio',

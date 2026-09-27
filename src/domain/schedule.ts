@@ -1,5 +1,5 @@
 // Horario: formato del contenido cifrado y su validación.
-// Solo importa tipos, para poder usarse desde el script de Node (scripts/schedule.ts).
+// Solo importa tipos, para poder usarse desde el script de Node (scripts/profile.ts).
 
 import type { Category, ScheduleBlock } from './types';
 

@@ -2,9 +2,6 @@ import type { SetsRule } from '../domain/types';
 
 // Fechas y fases del plan del cuatrimestre.
 
-/** Lunes de la semana 1 del plan (YYYY-MM-DD). */
-export const PLAN_START = '2026-09-28';
-
 export interface PhaseDef {
   key: string;
   /** Semanas del plan (inclusive). */
@@ -76,13 +73,9 @@ export const AFTER_END = {
 export const EXAM_MODE = {
   key: 'exam',
   label: 'Modo exámenes',
-  txt: '3 días × 45 min, 2 series por ejercicio. Mantienes lo ganado.',
+  /** {days} = rutinas que se mantienen. */
+  txt: '{days} días × 45 min, 2 series por ejercicio. Mantienes lo ganado.',
   color: 'var(--warn)',
   sets: { kind: 'fixed', sets: 2 } as SetsRule,
-  /** Rutinas que se mantienen por defecto (se puede cambiar en cada rutina desde la app). */
-  routineIds: ['torso-a', 'pierna-a', 'torso-b'],
 };
 
-/** Textos de ayuda de la pestaña Progreso. */
-export const WEIGHT_GOAL_TEXT =
-  'Objetivo semanal de peso.';
