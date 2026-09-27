@@ -16,7 +16,12 @@ export interface PushSubscriptionJSON {
 
 export const LIMITS = {
   jobsPerDevice: 200,
-  maxDevices: 5,
+  /** Dispositivos del dueño (registrados con su clave). */
+  maxOwnerDevices: 5,
+  /** Dispositivos por código de invitación. */
+  maxDevicesPerInvite: 3,
+  maxInvites: 30,
+  label: 40,
   text: 200,
   id: 80,
   /** Hasta cuándo se admite programar (ms desde ahora). */
@@ -78,4 +83,33 @@ export function randomHex(bytes: number): string {
 export function parseBearer(header: string | null): { id: string; secret: string } | null {
   const m = header?.match(/^Bearer ([a-f0-9]{16,64})\.([a-f0-9]{32,128})$/);
   return m ? { id: m[1]!, secret: m[2]! } : null;
+}
+
+/** Token de registro que envía la app: sha256("mi-cuatri-notify:" + clave o código). */
+export const registrationToken = (secret: string): Promise<string> =>
+  sha256Hex(`mi-cuatri-notify:${secret.trim().toLowerCase()}`);
+
+/** Código de invitación legible, p. ej. "k7mq-2xpa" (sin caracteres que se confundan). */
+export function generateInviteCode(): string {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const chars = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => alphabet[b % alphabet.length]);
+  return `${chars.slice(0, 4).join('')}-${chars.slice(4).join('')}`;
+}
+
+export function parseLabel(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t && t.length <= LIMITS.label ? t : null;
+}
+
+/** Qué avisos borrar y cuáles escribir para pasar de `current` a `desired` (solo lo que cambia). */
+export function diffJobs(current: Job[], desired: Job[]): { remove: string[]; upsert: Job[] } {
+  const now = new Map(current.map((j) => [j.id, j]));
+  const want = new Set(desired.map((j) => j.id));
+  const remove = current.filter((j) => !want.has(j.id)).map((j) => j.id);
+  const upsert = desired.filter((j) => {
+    const c = now.get(j.id);
+    return !c || c.fireAt !== j.fireAt || c.title !== j.title || c.body !== j.body;
+  });
+  return { remove, upsert };
 }

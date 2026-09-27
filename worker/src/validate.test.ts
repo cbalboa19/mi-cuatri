@@ -53,3 +53,35 @@ describe('auth helpers', () => {
     expect(safeEqual('abc', 'abcd')).toBe(false);
   });
 });
+
+describe('invites and job diff', async () => {
+  const { diffJobs, generateInviteCode, parseLabel, registrationToken, sha256Hex } = await import('./validate');
+
+  it('generates readable invite codes', () => {
+    const code = generateInviteCode();
+    expect(code).toMatch(/^[a-hjkmnp-z2-9]{4}-[a-hjkmnp-z2-9]{4}$/);
+    expect(generateInviteCode()).not.toBe(code);
+  });
+
+  it('derives the same token regardless of case and spaces', async () => {
+    expect(await registrationToken('  AbCd-EfGh ')).toBe(await registrationToken('abcd-efgh'));
+    expect(await registrationToken('abcd-efgh')).toBe(await sha256Hex('mi-cuatri-notify:abcd-efgh'));
+  });
+
+  it('validates labels', () => {
+    expect(parseLabel(' Mamá ')).toBe('Mamá');
+    expect(parseLabel('')).toBeNull();
+    expect(parseLabel('x'.repeat(41))).toBeNull();
+    expect(parseLabel(3)).toBeNull();
+  });
+
+  it('only rewrites the jobs that changed', () => {
+    const a = { id: 'a', fireAt: 1, title: 't', body: 'b' };
+    const b = { id: 'b', fireAt: 2, title: 't', body: 'b' };
+    const c = { id: 'c', fireAt: 3, title: 't', body: 'b' };
+    const r = diffJobs([a, b], [a, { ...b, fireAt: 5 }, c]);
+    expect(r.remove).toEqual([]);
+    expect(r.upsert.map((j) => j.id)).toEqual(['b', 'c']);
+    expect(diffJobs([a, b], [b])).toEqual({ remove: ['a'], upsert: [] });
+  });
+});
