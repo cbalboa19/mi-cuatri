@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { IdbRepository } from '../data/idb-repository';
 import { deriveKey, encryptWithKey, randomBytes } from '../domain/crypto';
+import { SAMPLE_PROFILE } from '../test/sample-config';
 import { Store } from './store';
 
 const DAY = 86_400_000;
@@ -12,6 +13,53 @@ async function makeStore(): Promise<Store> {
     throw e;
   });
 }
+
+const EMPTY_WEEK = [[], [], [], [], [], [], []];
+
+/** Store con el perfil de ejemplo desbloqueado (como el móvil del dueño). */
+async function makeProfileStore(): Promise<Store> {
+  const salt = randomBytes(16);
+  const enc = await encryptWithKey({ week: EMPTY_WEEK, ...SAMPLE_PROFILE }, await deriveKey('clave', salt, 1000), salt, 1000);
+  const repo = await IdbRepository.open(`store-p-${++n}`);
+  const s = await Store.load(repo, (e) => { throw e; }, enc);
+  await s.unlockSchedule('clave');
+  return s;
+}
+
+describe('Store without profile (guest)', () => {
+  it('starts completely empty', async () => {
+    const s = await makeStore();
+    expect(s.hasProfile).toBe(false);
+    expect(s.cfg.routines).toEqual([]);
+    expect(s.cfg.checklists.weekly).toEqual([]);
+    expect(s.cfg.planStart).toBeNull();
+    expect(s.schedule).toBeNull();
+    expect(s.phase(new Date()).key).toBe('none');
+  });
+
+  it('can build its own routines and schedule', async () => {
+    const s = await makeStore();
+    s.updateConfig(['routines'], (c) => c.routines.push({ id: 'r1', name: 'Full body', day: 2, desc: '', exercises: [] }));
+    s.updateConfig(['schedule'], (c) => c.schedule!.week[0]!.push({ start: '9:00', end: '10:00', label: 'Trabajo', cat: 'clase' }));
+    expect(s.cfg.routines.map((r) => r.name)).toEqual(['Full body']);
+    expect(s.schedule?.week[0]?.[0]?.label).toBe('Trabajo');
+  });
+});
+
+describe('Store with profile', () => {
+  it('loads routines, checklists and plan from the profile, and user edits win', async () => {
+    const s = await makeProfileStore();
+    expect(s.hasProfile).toBe(true);
+    expect(s.cfg.routines.map((r) => r.id)).toEqual(['torso-a', 'pierna-a', 'torso-b', 'pierna-b']);
+    expect(s.cfg.planStart).toBe('2026-09-28');
+    expect(s.cfg.weightGoal).toBe('Objetivo de ejemplo');
+    expect(s.isCustomized('routines')).toBe(false);
+    s.updateConfig(['planStart'], (c) => (c.planStart = null));
+    expect(s.cfg.planStart).toBeNull();
+    s.resetConfig('planStart');
+    expect(s.cfg.planStart).toBe('2026-09-28');
+  });
+});
 
 describe('Store', () => {
   it('reminds to export only when there is data and 7+ days passed', async () => {
@@ -39,7 +87,7 @@ describe('Store', () => {
   });
 
   it('runs a workout from start to finish', async () => {
-    const s = await makeStore();
+    const s = await makeProfileStore();
     s.startWorkout('torso-a', new Date(2026, 9, 12, 12, 15)); // semana 3: series completas
     expect(s.active?.exercises[0]?.plannedSets).toBe(4);
     s.setSetField(0, 0, 'kg', '70');
@@ -105,7 +153,7 @@ describe('Store schedule', () => {
 
 describe('Store editable config', () => {
   it('edits and resets routines, keeping defaults untouched', async () => {
-    const s = await makeStore();
+    const s = await makeProfileStore();
     expect(s.isCustomized('routines')).toBe(false);
     s.updateConfig(['routines'], (c) => {
       c.routines[0]!.name = 'Torso A+';
@@ -130,7 +178,7 @@ describe('Store editable config', () => {
   });
 
   it('adds exercises during a workout, optionally to the routine, and changes rest', async () => {
-    const s = await makeStore();
+    const s = await makeProfileStore();
     s.startWorkout('torso-a', new Date(2026, 9, 12, 12));
     const def = { id: 'ex_new', name: 'Pullover', sets: 3, reps: [10, 12] as [number, number], rir: '1', restSec: 75, incrementKg: 2.5 };
     s.addExerciseToActive(def, 3, true);
@@ -149,7 +197,7 @@ describe('Store editable config', () => {
   });
 
   it('edits a saved workout keeping its date and duration', async () => {
-    const s = await makeStore();
+    const s = await makeProfileStore();
     s.startWorkout('torso-a', new Date(2026, 9, 12, 12));
     s.setSetField(0, 0, 'kg', '70');
     s.setSetField(0, 0, 'reps', '8');

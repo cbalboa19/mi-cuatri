@@ -22,8 +22,8 @@ describe('schedule payload', () => {
     expect(() => parseSchedulePayload({ labels: { nope: 'x' }, week })).toThrow('labels');
   });
 
-  it('the bundled encrypted schedule has the expected shape', async () => {
-    const enc = (await import('../config/schedule.enc.json')).default;
+  it('the bundled encrypted profile has the expected shape', async () => {
+    const enc = (await import('../config/profile.enc.json')).default;
     expect(enc).toMatchObject({ v: 1, kdf: 'PBKDF2-SHA256' });
     expect(enc.iter).toBeGreaterThanOrEqual(600_000);
   });

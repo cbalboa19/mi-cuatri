@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SAMPLE_CONFIG } from '../test/sample-config';
 import { planNotifications, type PlanInput } from './notifications';
 import type { Schedule } from './schedule';
 import { emptyAppData, type AppData, type Workout } from './types';
@@ -17,7 +18,7 @@ const schedule: Schedule = {
 };
 
 function plan(over: Partial<PlanInput> & { data?: AppData } = {}) {
-  return planNotifications({ now: MON, data: emptyAppData(), schedule, lastExportAt: null, ...over });
+  return planNotifications({ now: MON, data: emptyAppData(), schedule, lastExportAt: null, cfg: SAMPLE_CONFIG, ...over });
 }
 const ids = (over: Parameters<typeof plan>[0] = {}) => plan(over).map((n) => n.id);
 

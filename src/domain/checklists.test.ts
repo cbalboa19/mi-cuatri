@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WEEKLY } from '../config/checklists';
+import { SAMPLE_CONFIG as CFG } from '../test/sample-config';
 import {
   countDone,
   dailyItems,
@@ -21,7 +21,7 @@ const workout = (date: Date): Workout => ({
   durationSec: 3600,
   exercises: [],
 });
-const ids = (date: Date, exam = false) => dailyItems(date, exam).map((i) => i.id);
+const ids = (date: Date, exam = false) => dailyItems(date, exam, CFG).map((i) => i.id);
 
 describe('dailyItems', () => {
   it('uses the weekday list with weigh-in on monday and wednesday', () => {
@@ -50,6 +50,7 @@ describe('auto items', () => {
     workouts: [at(2026, 9, 28), at(2026, 9, 29), at(2026, 9, 30), at(2026, 10, 4, 23)].map(workout),
     weights: { '2026-09-28': 64, '2026-09-30': 64.2, '2026-10-02': 64.4 },
     examMode: false,
+    cfg: CFG,
   };
 
   it('daily gym and weight', () => {
@@ -73,7 +74,7 @@ describe('auto items', () => {
   });
 
   it('counts manual and auto items', () => {
-    const items = dailyItems(at(2026, 9, 28), false);
+    const items = dailyItems(at(2026, 9, 28), false, CFG);
     expect(countDone(items, { desayuno: true, agua: true, snack: false }, at(2026, 9, 28), ctx)).toEqual({ done: 4, total: 11 });
   });
 
@@ -90,8 +91,9 @@ describe('auto items', () => {
   });
 
   it('resolves the gym target placeholder', () => {
-    const item = WEEKLY[0]!;
-    expect(resolveLabel(item, false)).toBe('4 de 4 entrenos');
-    expect(resolveLabel(item, true)).toBe('3 de 3 entrenos');
+    const item = CFG.checklists.weekly[0]!;
+    expect(resolveLabel(item, false, CFG)).toBe('4 de 4 entrenos');
+    expect(resolveLabel(item, true, CFG)).toBe('3 de 3 entrenos');
+    expect(resolveLabel(CFG.checklists.weekly[1]!, false, CFG)).toBe('3 pesajes registrados');
   });
 });
