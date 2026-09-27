@@ -2,7 +2,7 @@
 
 import { countDone, isItemDone, resolveLabel, type ChecklistContext } from '../domain/checklists';
 import { minutesOfDay, pad } from '../domain/dates';
-import type { Phase } from '../domain/plan';
+import { NO_PHASE_KEY, type Phase } from '../domain/plan';
 import type { Schedule } from '../domain/schedule';
 import { timelineState } from '../domain/timeline';
 import type { ChecklistItem, CheckScope, DayIndex } from '../domain/types';
@@ -16,6 +16,7 @@ export function header(store: Store, title: string, sub: string): string {
 }
 
 export function phaseStrip(ph: Phase, extraTxt = '', style = ''): string {
+  if (ph.key === NO_PHASE_KEY) return '';
   return `<div class="phase"${style ? ` style="${style}"` : ''}><span class="dot" style="background:${esc(ph.color)}"></span><div><b>${esc(ph.name)}</b><div class="sub">${esc(ph.txt)}${esc(extraTxt)}</div></div></div>`;
 }
 
@@ -24,7 +25,9 @@ export const scheduleLock = (): string =>
   `<div class="list"><div class="empty">Introduce tu clave para cargar el horario en este dispositivo.</div><form class="field" data-unlock style="padding:0 14px 14px"><input id="schedKey" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Clave del horario" aria-label="Clave del horario"><button class="btn sm" type="submit">Desbloquear</button></form></div>`;
 
 export function timeline(schedule: Schedule | null, day: DayIndex, live: boolean, now: Date): string {
-  if (!schedule) return scheduleLock();
+  if (!schedule || !schedule.week.some((d) => d.length)) {
+    return `<div class="list"><div class="empty">Aún no tienes horario. <button class="linkbtn" data-edit-schedule="${day}">Crear horario</button></div></div>`;
+  }
   const blocks = schedule.week[day] ?? [];
   const n = minutesOfDay(now);
   const { states, pulseAt } = timelineState(blocks, live ? n : null);
@@ -65,8 +68,9 @@ export function checklist(
     })
     .join('');
   const pct = total ? (done / total) * 100 : 0;
+  const body = rows || '<div class="empty">Sin ítems todavía. Añádelos con «Editar».</div>';
   return {
-    html: `<div class="progress"><i style="width:${pct}%"></i></div><div class="list" data-store="${scope}" data-key="${esc(period)}">${rows}</div>`,
+    html: `<div class="progress"><i style="width:${pct}%"></i></div><div class="list" data-store="${scope}" data-key="${esc(period)}">${body}</div>`,
     done,
     total,
   };

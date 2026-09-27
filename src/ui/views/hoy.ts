@@ -1,7 +1,7 @@
 import { dailyItems, dayTypeOf, workoutsOnDay } from '../../domain/checklists';
 import { addDays, dow, startOfDay, ymd } from '../../domain/dates';
 import { DAY_NAMES, MONTH_NAMES } from '../../domain/locale';
-import { phaseFor, routinesForDay } from '../../domain/plan';
+import { routinesForDay } from '../../domain/plan';
 import type { Store } from '../../app/store';
 import { checklist, editLink, header, navHeader, phaseStrip, timeline } from '../components';
 import { esc } from '../html';
@@ -19,7 +19,7 @@ export function renderHoy(store: Store, ui: UiState, now: Date): string {
   const w = dow(d);
   const exam = store.data.settings.examMode;
   const cfg = store.cfg;
-  const ph = phaseFor(d, exam, cfg.planStart);
+  const ph = store.phase(d);
 
   // Checklist: hoy o un día anterior (flechas ‹ ›).
   const cd = addDays(startOfDay(now), ui.dayOffset);

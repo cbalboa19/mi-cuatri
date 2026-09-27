@@ -12,7 +12,7 @@ export function renderHorario(store: Store, ui: UiState, now: Date): string {
     (n, i) => `<button data-day="${i}" aria-pressed="${ui.viewDay === i}">${n.slice(0, 2)}${i === today ? '·' : ''}</button>`,
   ).join('');
   const study = store.schedule ? studyMinutes(store.schedule.week[ui.viewDay] ?? []) : 0;
-  const edit = store.schedule ? editLink(`data-edit-schedule="${ui.viewDay}"`) : '';
+  const edit = editLink(`data-edit-schedule="${ui.viewDay}"`);
   return (
     header(store, 'Horario', 'Semana tipo') +
     `<div class="days" role="group" aria-label="Día">${btns}</div>` +

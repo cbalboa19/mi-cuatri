@@ -1,4 +1,3 @@
-import { WEIGHT_GOAL_TEXT } from '../../config/plan';
 import { parseYmd, ymd } from '../../domain/dates';
 import { bestE1rm, exerciseSessions, trackedExercises } from '../../domain/progression';
 import { movingAverage, weekAverages } from '../../domain/weight';
@@ -59,7 +58,7 @@ export function renderProgreso(store: Store, ui: UiState, now: Date): string {
     header(store, 'Progreso', 'Peso y cargas') +
     `<h2>Peso corporal</h2><div class="field"><input id="wIn" inputmode="decimal" placeholder="${esc(placeholder)} kg" aria-label="Peso en kg"><input id="wDate" type="date" value="${esc(wDate)}" max="${esc(today)}" aria-label="Fecha del pesaje"><button class="btn sm" data-addw>${wDate === today ? 'Guardar hoy' : 'Guardar'}</button></div>
     <div class="list" style="margin-top:10px"><div class="stat"><span>Media esta semana</span><b>${aT != null ? aT.toFixed(1) + ' kg' : '-'}</b></div><div class="stat"><span>Media semana pasada</span><b>${aP != null ? aP.toFixed(1) + ' kg' : '-'}</b></div><div class="stat"><span>Cambio</span><b style="color:${changeColor}">${changeTxt}</b></div></div>
-    <p class="sub">${esc(WEIGHT_GOAL_TEXT)}</p>
+    ${store.cfg.weightGoal ? `<p class="sub">${esc(store.cfg.weightGoal)}</p>` : ''}
     <div class="chart">${lineChart(pts, (v) => v.toFixed(1))}</div>
     ${recent ? `<div class="list" style="margin-top:10px">${recent}</div>` : ''}
     <h2>Cargas por ejercicio</h2>${exBlock}

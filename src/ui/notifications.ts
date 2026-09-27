@@ -7,7 +7,9 @@ import type { App } from './app';
 import { esc } from './html';
 
 export function renderNotificationsSection(notify: NotifyClient): (store: Store, now: Date) => string {
-  return () => {
+  return (store) => {
+    // Sin perfil (clave) no hay notificaciones: el servidor pide la clave para registrarse.
+    if (!store.hasProfile) return '';
     const status = notify.status;
     const head = '<h2>Notificaciones</h2>';
     if (status === 'not-installed' || status === 'unsupported') {

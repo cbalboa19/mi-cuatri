@@ -1,7 +1,7 @@
 import { weekWorkouts } from '../../domain/checklists';
 import { dow } from '../../domain/dates';
 import { DAY_NAMES } from '../../domain/locale';
-import { phaseFor, routinesForDay, weeklyGymTarget } from '../../domain/plan';
+import { routinesForDay, weeklyGymTarget } from '../../domain/plan';
 import { lastSessionFor, suggestIncrease } from '../../domain/progression';
 import type { ActiveExercise, ExerciseDef } from '../../domain/types';
 import type { Store } from '../../app/store';
@@ -14,7 +14,7 @@ export function renderGym(store: Store, now: Date): string {
   const exam = store.data.settings.examMode;
   const cfg = store.cfg;
   const todays = new Set(routinesForDay(dow(now), exam, cfg.routines).map((r) => r.id));
-  const ph = phaseFor(now, exam, cfg.planStart);
+  const ph = store.phase(now);
   const cards = cfg.routines
     .map((r) => {
       const isToday = todays.has(r.id);
@@ -28,9 +28,13 @@ export function renderGym(store: Store, now: Date): string {
   const reset = store.isCustomized('routines')
     ? `<button class="linkbtn" style="display:block;margin:10px auto 0;color:var(--muted)" data-reset="routines">Restaurar las rutinas originales</button>`
     : '';
+  const done = weekWorkouts(store.data.workouts, now).length;
+  const target = weeklyGymTarget(exam, cfg.routines);
+  const empty = cfg.routines.length ? '' : '<div class="list" style="margin-bottom:10px"><div class="empty">Aún no tienes rutinas. Crea la primera con sus ejercicios.</div></div>';
   return (
-    header(store, 'Gym', `${weekWorkouts(store.data.workouts, now).length}/${weeklyGymTarget(exam, cfg.routines)} entrenos esta semana`) +
+    header(store, 'Gym', target ? `${done}/${target} entrenos esta semana` : `${done} entrenos esta semana`) +
     phaseStrip(ph, ' Las series ya vienen ajustadas.', 'margin-bottom:14px') +
+    empty +
     cards +
     `<button class="btn ghost" data-new-routine>+ Nueva rutina</button>${reset}` +
     `<p class="sub" style="margin-top:14px">RIR = repeticiones que te quedan en la recámara. Cuando hagas el máximo del rango en todas las series, sube peso y vuelve al mínimo.</p>`

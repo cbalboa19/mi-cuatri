@@ -158,7 +158,7 @@ export class App {
     e.preventDefault();
     const input = form.querySelector<HTMLInputElement>('#schedKey');
     const password = input?.value ?? '';
-    if (!password.trim()) return this.toast('Escribe la clave del horario');
+    if (!password.trim()) return this.toast('Escribe la clave');
     input?.blur();
     this.toast('Desbloqueando…');
     this.store
@@ -166,11 +166,11 @@ export class App {
       .then((ok) => {
         if (!ok) return this.toast('Clave incorrecta');
         this.render();
-        this.toast('Horario cargado');
+        this.toast('Perfil cargado');
       })
       .catch((err) => {
         console.error(err);
-        this.toast('No se ha podido desbloquear el horario');
+        this.toast('No se ha podido cargar el perfil');
       });
   }
 

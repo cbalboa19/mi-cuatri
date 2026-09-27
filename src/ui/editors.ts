@@ -1,6 +1,7 @@
 // Editores: rutinas y ejercicios, checklists, horario y ajustes. Se abren en lugar de la pestaña
 // (ui.editor) y guardan cada cambio al momento en la configuración del usuario.
 
+import { CATEGORY_LABELS } from '../config/schedule';
 import { newId, type Config, type NotifyTimes, type UserConfig } from '../domain/config';
 import { pad, toMin } from '../domain/dates';
 import { DAY_NAMES } from '../domain/locale';
@@ -118,9 +119,9 @@ const toInputTime = (t: string): string => {
 };
 
 function renderScheduleEditor(store: Store, day: DayIndex): string {
-  const s = store.schedule;
+  // Sin horario todavía: se empieza con una semana vacía.
+  const s = store.schedule ?? { labels: CATEGORY_LABELS, week: [[], [], [], [], [], [], []] };
   const days = `<div class="days" role="group" aria-label="Día" style="margin-top:14px">${DAY_NAMES.map((n, i) => `<button data-sch-day="${i}" aria-pressed="${day === i}">${n.slice(0, 2)}</button>`).join('')}</div>`;
-  if (!s) return `${editorHeader('Editar horario')}${days}<div style="margin-top:14px">${scheduleLock()}</div>`;
   const cats = (sel: Category) => CATEGORIES.map((c) => `<option value="${c}" ${c === sel ? 'selected' : ''}>${esc(s.labels[c])}</option>`).join('');
   const blocks = (s.week[day] ?? [])
     .map(
@@ -157,15 +158,20 @@ function renderSettingsEditor(store: Store): string {
     `<label>${label}<input type="time" data-nt="${k}" value="${toInputTime(c.notifyTimes[k])}"></label>`;
   return `${editorHeader('Ajustes')}
     <h2>Plan</h2><div class="list"><div class="egrid" style="grid-template-columns:1fr">
-      <label>Lunes de la semana 1 del plan<input type="date" data-set-start value="${esc(c.planStart)}"></label>
+      <label>Lunes de la semana 1 del plan<input type="date" data-set-start value="${esc(c.planStart ?? '')}"></label>
     </div></div>
-    <p class="sub">Las fases (reentrada, descarga…) se cuentan desde esa semana.</p>
-    <h2>Horas de los avisos</h2><div class="list"><div class="egrid" style="grid-template-columns:1fr 1fr">
+    <p class="sub">Las fases (reentrada, descarga…) y las series se ajustan desde esa semana. Déjalo vacío si no sigues un plan por semanas.</p>
+    ${
+      store.hasProfile
+        ? `<h2>Horas de los avisos</h2><div class="list"><div class="egrid" style="grid-template-columns:1fr 1fr">
       ${t('creatina', 'Creatina')}${t('peso', 'Pesarse')}${t('planWeek', 'Planificar semana (dom.)')}${t('backup', 'Copia de seguridad (dom.)')}
       <label>Aviso de gym (min antes)<input inputmode="numeric" data-nt-num="gymMinutesBefore" value="${c.notifyTimes.gymMinutesBefore}"></label>
       <label>Entreno abierto (min)<input inputmode="numeric" data-nt-num="openWorkoutMinutes" value="${c.notifyTimes.openWorkoutMinutes}"></label>
-    </div></div>
+    </div></div>`
+        : ''
+    }
     <p class="sub">Los días de pesaje se cambian en el editor de la checklist diaria.</p>
+    ${store.hasProfile ? '' : `<h2>Clave</h2>${scheduleLock().replace('Introduce tu clave para cargar el horario en este dispositivo.', 'Si tienes una clave, escríbela para cargar tu perfil en este dispositivo.')}`}
     ${store.isCustomized('notifyTimes') || store.isCustomized('planStart') ? `<button class="linkbtn" style="display:block;margin:14px auto 0;color:var(--muted)" data-reset-settings>Restaurar ajustes originales</button>` : ''}`;
 }
 
@@ -400,6 +406,10 @@ export function installEditorHandlers(app: App): void {
 
     if (current('settings')) {
       if (el.hasAttribute('data-set-start')) {
+        if (v === '') {
+          store.updateConfig(['planStart'], (c) => (c.planStart = null));
+          return app.toast('Sin plan por semanas');
+        }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return app.toast('Fecha no válida');
         store.updateConfig(['planStart'], (c) => (c.planStart = v));
         return app.toast('Fecha de inicio cambiada');

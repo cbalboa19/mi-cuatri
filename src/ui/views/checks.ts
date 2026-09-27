@@ -37,7 +37,7 @@ export function renderChecks(store: Store, ui: UiState, now: Date): string {
       .join('');
     body = `${navRow('weeknav', label, ui.weekOffset)}
      <div class="ehead"><h2>Checklist semanal · ${cl.done}/${cl.total}</h2>${editLink('data-edit-checklist="weekly"')}</div>${cl.html}
-     <h2>Resumen</h2><div class="list"><div class="stat"><span>Entrenos</span><b>${weekWorkouts(store.data.workouts, wd).length}/${weeklyGymTarget(exam, cfg.routines)}</b></div><div class="stat"><span>Checklists diarias</span><b>${sum.pct}%</b></div>${days}</div>
+     <h2>Resumen</h2><div class="list"><div class="stat"><span>Entrenos</span><b>${weekWorkouts(store.data.workouts, wd).length}${weeklyGymTarget(exam, cfg.routines) ? `/${weeklyGymTarget(exam, cfg.routines)}` : ''}</b></div><div class="stat"><span>Checklists diarias</span><b>${sum.pct}%</b></div>${days}</div>
      <p class="sub">Toca un día para ver o corregir su checklist.</p>`;
   } else {
     const md = ui.monthOffset === 0 ? now : new Date(now.getFullYear(), now.getMonth() + ui.monthOffset, 1);
@@ -53,15 +53,18 @@ export function renderChecks(store: Store, ui: UiState, now: Date): string {
      <div class="ehead"><h2>Checklist de ${MONTH_NAMES[md.getMonth()]} · ${cl.done}/${cl.total}</h2>${editLink('data-edit-checklist="monthly"')}</div>${cl.html}
      <h2>Resumen del mes</h2><div class="list"><div class="stat"><span>Entrenos</span><b>${mw.length}</b></div><div class="stat"><span>Tiempo entrenando</span><b>${fmtDur(mw.reduce((a, w) => a + w.durationSec, 0))}</b></div><div class="stat"><span>Peso</span><b>${weightTxt}</b></div></div>`;
   }
-  const w = planWeek(now, cfg.planStart);
-  const start = formatStart(cfg.planStart);
-  const sub = w < 1 ? `El plan empieza el ${start.slice(0, start.indexOf(' de '))}` : `Semana ${w} del plan`;
+  let sub = `${now.getDate()} de ${MONTH_NAMES[now.getMonth()]}`;
+  if (cfg.planStart) {
+    const w = planWeek(now, cfg.planStart);
+    const start = formatStart(cfg.planStart);
+    sub = w < 1 ? `El plan empieza el ${start.slice(0, start.indexOf(' de '))}` : `Semana ${w} del plan`;
+  }
   const examDays = activeRoutines(true, cfg.routines).filter((r) => r.day != null).length;
   return (
     header(store, 'Checks', sub) +
     seg +
     body +
-    `<h2>Exámenes</h2><div class="list"><button class="item ${exam ? 'done' : ''}" data-exam aria-pressed="${exam}"><span class="box"></span><span class="lbl">Modo exámenes<div class="hint">Gym en mantenimiento: ${examDays} días, 2 series por ejercicio</div></span></button></div>` +
-    `<button class="btn ghost" data-edit-settings style="margin-top:10px">Ajustes del plan y de los avisos</button>`
+    (cfg.routines.length ? `<h2>Exámenes</h2><div class="list"><button class="item ${exam ? 'done' : ''}" data-exam aria-pressed="${exam}"><span class="box"></span><span class="lbl">Modo exámenes<div class="hint">Gym en mantenimiento: ${examDays} días, 2 series por ejercicio</div></span></button></div>` : '') +
+    `<button class="btn ghost" data-edit-settings style="margin-top:10px">Ajustes</button>`
   );
 }
