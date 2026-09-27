@@ -12,8 +12,8 @@ Convenciones del proyecto "Mi cuatri" para futuras sesiones. Si existe `CLAUDE.l
 - No añadir dependencias sin justificarlo.
 
 ## Arquitectura
-- `src/config/`: valores por defecto (rutinas, checklists, plan; el horario se distribuye cifrado). Solo datos, sin lógica.
-- `src/domain/config.ts`: configuración efectiva = valores por defecto + `UserConfig` (lo que el usuario edita en la app; se guarda en IndexedDB y en el backup). Usa siempre `store.cfg`, no importes `ROUTINES`/`DAILY` directamente en la UI.
+- `src/config/`: textos y constantes (fases del plan, avisos, categorías). La app no trae rutinas ni checklists por defecto; el perfil propio va cifrado en `profile.enc.json`.
+- `src/domain/config.ts`: configuración efectiva = app vacía + perfil cifrado (`src/domain/profile.ts`, si el dispositivo tiene la clave) + `UserConfig` (lo que se edita en la app; IndexedDB y backup). En la UI usa siempre `store.cfg`.
 - `src/ui/editors.ts`: editores de rutinas, checklists, horario y ajustes (se abren con `ui.editor`).
 - `src/domain/`: lógica **pura** y testeada. Sin DOM ni almacenamiento. Cada módulo tiene su `*.test.ts` al lado.
 - `src/data/repository.ts`: interfaz de almacenamiento. `idb-repository.ts` es la implementación local. La UI y el store nunca tocan IndexedDB directamente.
