@@ -1,20 +1,15 @@
 // Formato de backup (JSON con versión de esquema), validación y migraciones.
 // Si cambias el formato: sube CURRENT_SCHEMA_VERSION y añade una migración en MIGRATIONS.
 
-import type { ChecklistsConfig, NotifyTimes, UserConfig } from './config';
+import type { NotifyTimes, UserConfig } from './config';
 import { parseSchedulePayload } from './schedule';
+import { arr, bool, DATE_RE, fail, Invalid, isObj, num, numOrNull, obj, str, vChecklists, vDate, vRange, vRoutine } from './validators';
 import type {
   ActiveExercise,
   ActiveSet,
   ActiveWorkout,
   AppData,
-  AutoKind,
-  ChecklistItem,
   CheckScope,
-  DayIndex,
-  DayType,
-  ExerciseDef,
-  RoutineDef,
   Settings,
   Workout,
   WorkoutExercise,
@@ -92,34 +87,6 @@ const MIGRATIONS: Record<number, Migration> = {
 
 export type ParseResult = { ok: true; backup: Backup } | { ok: false; error: string };
 
-class Invalid extends Error {}
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-function fail(path: string): never {
-  throw new Invalid(`Dato no válido en ${path}`);
-}
-
-function str(v: unknown, path: string): string {
-  return typeof v === 'string' ? v : fail(path);
-}
-function num(v: unknown, path: string): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : fail(path);
-}
-function bool(v: unknown, path: string): boolean {
-  return typeof v === 'boolean' ? v : fail(path);
-}
-function obj(v: unknown, path: string): Record<string, unknown> {
-  return isObj(v) ? v : fail(path);
-}
-function arr(v: unknown, path: string): unknown[] {
-  return Array.isArray(v) ? v : fail(path);
-}
-function numOrNull(v: unknown, path: string): number | null {
-  return v === null ? null : num(v, path);
-}
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SCOPES: CheckScope[] = ['daily', 'weekly', 'monthly'];
 
 function vSettings(v: unknown): SettingsRecord {
@@ -213,72 +180,6 @@ function vActive(v: unknown): ActiveWorkout | null {
   };
 }
 
-function vRange(v: unknown, p: string): [number, number] {
-  const a = arr(v, p);
-  if (a.length !== 2) fail(p);
-  return [num(a[0], `${p}[0]`), num(a[1], `${p}[1]`)];
-}
-
-const AUTO_KINDS: AutoKind[] = ['daily-gym', 'daily-weight', 'weekly-gym', 'weekly-weights'];
-const DAY_TYPES: DayType[] = ['weekday', 'friday', 'saturday', 'sunday'];
-
-function vDay(v: unknown, p: string): DayIndex {
-  const n = num(v, p);
-  if (!Number.isInteger(n) || n < 0 || n > 6) fail(p);
-  return n as DayIndex;
-}
-
-function vItems(v: unknown, p: string): ChecklistItem[] {
-  return arr(v, p).map((it, i) => {
-    const o = obj(it, `${p}[${i}]`);
-    const item: ChecklistItem = { id: str(o.id, `${p}[${i}].id`), label: str(o.label, `${p}[${i}].label`) };
-    if (o.auto !== undefined) {
-      if (!AUTO_KINDS.includes(o.auto as AutoKind)) fail(`${p}[${i}].auto`);
-      item.auto = o.auto as AutoKind;
-    }
-    return item;
-  });
-}
-
-function vExercise(v: unknown, p: string): ExerciseDef {
-  const o = obj(v, p);
-  return {
-    id: str(o.id, `${p}.id`),
-    name: str(o.name, `${p}.name`),
-    sets: num(o.sets, `${p}.sets`),
-    reps: vRange(o.reps, `${p}.reps`),
-    rir: str(o.rir, `${p}.rir`),
-    restSec: num(o.restSec, `${p}.restSec`),
-    incrementKg: num(o.incrementKg, `${p}.incrementKg`),
-  };
-}
-
-function vRoutine(v: unknown, i: number): RoutineDef {
-  const p = `config.routines[${i}]`;
-  const o = obj(v, p);
-  return {
-    id: str(o.id, `${p}.id`),
-    name: str(o.name, `${p}.name`),
-    day: o.day === null ? null : vDay(o.day, `${p}.day`),
-    desc: str(o.desc, `${p}.desc`),
-    ...(o.exam !== undefined ? { exam: bool(o.exam, `${p}.exam`) } : {}),
-    exercises: arr(o.exercises, `${p}.exercises`).map((e, j) => vExercise(e, `${p}.exercises[${j}]`)),
-  };
-}
-
-function vChecklists(v: unknown): ChecklistsConfig {
-  const p = 'config.checklists';
-  const o = obj(v, p);
-  const d = obj(o.daily, `${p}.daily`);
-  const daily = Object.fromEntries(DAY_TYPES.map((t) => [t, vItems(d[t], `${p}.daily.${t}`)])) as Record<DayType, ChecklistItem[]>;
-  return {
-    daily,
-    weekly: vItems(o.weekly, `${p}.weekly`),
-    monthly: vItems(o.monthly, `${p}.monthly`),
-    weighDays: arr(o.weighDays, `${p}.weighDays`).map((x, i) => vDay(x, `${p}.weighDays[${i}]`)),
-  };
-}
-
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
 function vNotifyTimes(v: unknown): Partial<NotifyTimes> {
@@ -301,8 +202,8 @@ function vConfig(v: unknown): UserConfig {
   if (v === undefined || v === null) return {};
   const o = obj(v, 'config');
   const out: UserConfig = {};
-  if (o.routines !== undefined) out.routines = arr(o.routines, 'config.routines').map(vRoutine);
-  if (o.checklists !== undefined) out.checklists = vChecklists(o.checklists);
+  if (o.routines !== undefined) out.routines = arr(o.routines, 'config.routines').map((r, i) => vRoutine(r, `config.routines[${i}]`));
+  if (o.checklists !== undefined) out.checklists = vChecklists(o.checklists, 'config.checklists');
   if (o.schedule !== undefined) {
     try {
       out.schedule = parseSchedulePayload(o.schedule);
@@ -310,11 +211,7 @@ function vConfig(v: unknown): UserConfig {
       fail('config.schedule');
     }
   }
-  if (o.planStart !== undefined) {
-    const d = str(o.planStart, 'config.planStart');
-    if (!DATE_RE.test(d)) fail('config.planStart');
-    out.planStart = d;
-  }
+  if (o.planStart !== undefined) out.planStart = o.planStart === null ? null : vDate(o.planStart, 'config.planStart');
   if (o.notifyTimes !== undefined) out.notifyTimes = vNotifyTimes(o.notifyTimes);
   return out;
 }
