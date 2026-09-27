@@ -15,6 +15,8 @@ export interface DeviceMeta {
 export interface NotifyState {
   deviceId: string;
   secret: string;
+  /** Dueño (registrado con su clave) o invitado (con un código). Sin valor = registro antiguo del dueño. */
+  role?: 'owner' | 'guest';
   disabled: Partial<Record<NotificationType, boolean>>;
 }
 

@@ -181,3 +181,5 @@ button.stat{width:100%;text-align:left;font:inherit}
 .exopts summary::-webkit-details-marker{display:none}
 .exopts .row{flex-wrap:wrap;padding:4px 0 6px}
 .exopts input{width:80px;padding:8px;border-radius:9px;border:1px solid var(--line);background:var(--surface2);font-size:16px;text-align:center}
+/* interruptores (tipos de aviso): activado = check verde, sin tachar */
+.item.toggle.done .lbl{color:inherit;text-decoration:none}

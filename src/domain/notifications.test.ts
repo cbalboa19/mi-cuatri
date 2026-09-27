@@ -13,7 +13,9 @@ const schedule: Schedule = {
   week: [
     [{ start: '12:15', end: '13:30', label: 'Gym', cat: 'gym' }],
     [{ start: '12:40', end: '14:00', label: 'Gym', cat: 'gym' }],
-    [], [], [], [], [],
+    [],
+    [{ start: '12:40', end: '14:00', label: 'Gym', cat: 'gym' }],
+    [], [], [],
   ],
 };
 
@@ -52,8 +54,8 @@ describe('planNotifications', () => {
   it('reminds the workout 15 min before the gym block of the schedule', () => {
     expect(plan().find((n) => n.id === 'gym:2026-10-05')).toMatchObject({ fireAt: t(5, 12, 0), body: 'Hoy toca Torso A a las 12:15' });
     expect(plan().find((n) => n.id === 'gym:2026-10-06')).toMatchObject({ fireAt: t(6, 12, 25), body: 'Hoy toca Pierna A a las 12:40' });
-    // Sin horario desbloqueado usa la hora por defecto.
-    expect(plan({ schedule: null }).find((n) => n.id === 'gym:2026-10-06')?.fireAt).toBe(t(6, 12, 0));
+    // Sin bloque de gym en el horario no se avisa.
+    expect(ids({ schedule: null })).not.toContain('gym:2026-10-06');
     expect(ids()).not.toContain('gym:2026-10-09'); // viernes
   });
 

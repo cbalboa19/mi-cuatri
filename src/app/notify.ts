@@ -10,6 +10,13 @@ import type { Store } from './store';
 export type NotifyStatus = 'unsupported' | 'not-installed' | 'denied' | 'off' | 'on';
 export type EnableResult = 'ok' | 'denied' | 'bad-key' | 'error';
 
+export interface InviteInfo {
+  id: string;
+  label: string;
+  createdAt: number;
+  devices: number;
+}
+
 const DEBOUNCE_MS = 1500;
 
 function base64UrlToBytes(b64url: string): Uint8Array<ArrayBuffer> {
@@ -24,6 +31,10 @@ export class NotifyClient {
   private registration: ServiceWorkerRegistration | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private syncing: Promise<void> = Promise.resolve();
+  /** Invitaciones (solo el dueño); null = sin cargar. */
+  invites: InviteInfo[] | null = null;
+  /** Se llama cuando llegan datos nuevos del servidor (para volver a pintar). */
+  onUpdate: (() => void) | null = null;
 
   private constructor(
     private readonly repo: Repository,
@@ -88,8 +99,9 @@ export class NotifyClient {
           return 'bad-key';
         }
         if (!res.ok) return 'error';
-        const { id, secret } = (await res.json()) as { id: string; secret: string };
-        this.state = { deviceId: id, secret, disabled: this.state?.disabled ?? {} };
+        const { id, secret, role } = (await res.json()) as { id: string; secret: string; role?: 'owner' | 'guest' };
+        this.state = { deviceId: id, secret, role: role ?? 'owner', disabled: this.state?.disabled ?? {} };
+        this.invites = null;
         await this.repo.setNotifyState(this.state);
         await this.sync();
         return 'ok';
@@ -103,10 +115,51 @@ export class NotifyClient {
   async disable(): Promise<void> {
     const state = this.state;
     this.state = null;
+    this.invites = null;
     await this.repo.setNotifyState(null);
     if (state) await this.call('DELETE', '/device', undefined, state).catch(() => {});
     const sub = await this.registration?.pushManager.getSubscription();
     await sub?.unsubscribe().catch(() => {});
+  }
+
+  /** ¿Este dispositivo es del dueño? (los registros antiguos no guardaban el rol). */
+  isOwner(hasProfile: boolean): boolean {
+    return this.state?.role === 'owner' || (!!this.state && !this.state.role && hasProfile);
+  }
+
+  async loadInvites(): Promise<void> {
+    try {
+      const res = await this.call('GET', '/invites');
+      if (!res.ok) return;
+      this.invites = ((await res.json()) as { invites: InviteInfo[] }).invites;
+      this.onUpdate?.();
+    } catch {
+      // sin conexión: se reintenta al volver a abrir la sección
+    }
+  }
+
+  /** Crea un código de invitación. Devuelve el código (solo se ve esta vez). */
+  async createInvite(label: string): Promise<{ code: string; label: string } | 'limit' | 'error'> {
+    try {
+      const res = await this.call('POST', '/invites', { label });
+      if (res.status === 409) return 'limit';
+      if (!res.ok) return 'error';
+      const inv = (await res.json()) as { code: string; label: string };
+      await this.loadInvites();
+      return inv;
+    } catch {
+      return 'error';
+    }
+  }
+
+  async revokeInvite(id: string): Promise<boolean> {
+    try {
+      const res = await this.call('DELETE', `/invites/${id}`);
+      if (res.ok) await this.loadInvites();
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   async setEnabled(type: NotificationType, on: boolean): Promise<void> {

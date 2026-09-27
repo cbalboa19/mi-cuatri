@@ -76,8 +76,9 @@ export function planNotifications({ now, data, schedule, lastExportAt, disabled 
 
     const routines = routinesForDay(d, exam, cfg.routines);
     const trainingNow = data.active != null && !data.active.editOf && ymd(new Date(data.active.startedAt)) === key;
-    if (on('gym') && routines.length && workoutsOnDay(data.workouts, day).length === 0 && !trainingNow) {
-      const start = at(day, gymStart(schedule, day) ?? NOTIFY.gym.fallbackTime);
+    const gymTime = gymStart(schedule, day);
+    if (on('gym') && gymTime && routines.length && workoutsOnDay(data.workouts, day).length === 0 && !trainingNow) {
+      const start = at(day, gymTime);
       const fire = new Date(start.getTime() - times.gymMinutesBefore * 60_000);
       const names = routines.map((r) => r.name).join(' + ');
       add('gym', key, fire, NOTIFY.gym.title, fill(NOTIFY.gym.body, { routine: names, time: hhmm(start) }));
