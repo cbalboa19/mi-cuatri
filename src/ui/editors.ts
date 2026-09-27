@@ -195,11 +195,25 @@ const int = (v: string) => Math.round(parseNum(v));
 
 export function installEditorHandlers(app: App): void {
   const { store, ui } = app;
+  // Cada editor abierto ocupa una entrada del historial: el botón "atrás" de Android
+  // (o el gesto de volver) cierra el editor en lugar de salir de la app.
+  const EDITOR_STATE = { miCuatriEditor: true };
+  const inEditorState = () => (history.state as typeof EDITOR_STATE | null)?.miCuatriEditor === true;
   const open = (editor: Editor) => {
+    if (inEditorState()) history.replaceState(EDITOR_STATE, '');
+    else history.pushState(EDITOR_STATE, '');
     ui.editor = editor;
     app.render();
     window.scrollTo(0, 0);
   };
+  const close = () => {
+    ui.editor = null;
+    app.render();
+    window.scrollTo(0, 0);
+  };
+  window.addEventListener('popstate', () => {
+    if (ui.editor) close();
+  });
   const rerender = () => app.render();
   const current = <K extends Editor['kind']>(kind: K) => (ui.editor?.kind === kind ? (ui.editor as Extract<Editor, { kind: K }>) : null);
 
@@ -210,9 +224,8 @@ export function installEditorHandlers(app: App): void {
 
     // Abrir y cerrar editores
     if (t.hasAttribute('data-editor-done')) {
-      ui.editor = null;
-      app.render();
-      return window.scrollTo(0, 0);
+      // Si el editor tiene su entrada en el historial, se cierra volviendo atrás.
+      return inEditorState() ? history.back() : close();
     }
     if (ds.editRoutine) return open({ kind: 'routine', id: ds.editRoutine });
     if (t.hasAttribute('data-new-routine')) {

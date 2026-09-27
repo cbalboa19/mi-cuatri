@@ -16,7 +16,7 @@ export function renderNotificationsSection(notify: NotifyClient): (store: Store,
       return `${head}<div class="list"><div class="empty">Para recibir avisos, abre la app desde el icono de la pantalla de inicio.</div></div>`;
     }
     if (status === 'denied') {
-      return `${head}<div class="list"><div class="empty">Las notificaciones están bloqueadas. Actívalas en Ajustes → Notificaciones → Mi cuatri.</div></div>`;
+      return `${head}<div class="list"><div class="empty">Las notificaciones están bloqueadas. Actívalas para Mi cuatri en los ajustes de notificaciones del móvil.</div></div>`;
     }
     if (status === 'off') {
       return `${head}<div class="list"><div class="empty">Avisos como el fin del descanso o si se te olvida la creatina.</div><form class="field" data-notify-on style="padding:0 14px 14px"><input id="notifyKey" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tu clave" aria-label="Tu clave"><button class="btn sm" type="submit">Activar</button></form></div>`;

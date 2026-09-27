@@ -138,6 +138,8 @@ export class App {
   }
 
   goTab(tab: TabKey): void {
+    // Si había un editor abierto con su entrada en el historial, se retira.
+    if (this.ui.editor && (history.state as { miCuatriEditor?: boolean } | null)?.miCuatriEditor) history.back();
     this.ui.tab = tab;
     this.ui.editor = null;
     saveTab(tab);

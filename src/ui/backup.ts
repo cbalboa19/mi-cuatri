@@ -19,7 +19,7 @@ export function renderDataSection(store: Store, now: Date): string {
   return `<h2>Datos</h2><div class="list"><div class="stat"><span>Última copia</span><b class="${need ? 'reminder' : ''}">${lastExportText(store.daysSinceExport(t))}</b></div><div class="stat"><span>Guardado</span><b>${store.synced ? 'En tu cuenta' : 'En este dispositivo'}</b></div></div>
     <div class="row" style="margin-top:10px"><button class="btn ghost" data-export>Exportar copia</button><button class="btn ghost" data-import>Importar copia</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <p class="sub">Tus datos solo están en este móvil: si borras la app, se pierden. Guarda la copia en Archivos o iCloud Drive de vez en cuando.</p>
+    <p class="sub">Tus datos solo están en este móvil: si borras la app, se pierden. Exporta una copia de vez en cuando y guárdala en un sitio seguro (Archivos, iCloud, Google Drive…).</p>
     <p class="sub" style="font-size:12px">Mi cuatri v${__APP_VERSION__}</p>`;
 }
 
@@ -34,7 +34,7 @@ function download(file: File): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/** Abre la hoja de compartir (iOS: "Guardar en Archivos") o descarga el archivo. */
+/** Abre el menú de compartir del móvil (para guardarla en Archivos, Drive…) o descarga el archivo. */
 async function deliver(result: ExportResult): Promise<boolean> {
   const file = new File([result.json], result.name, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
