@@ -82,6 +82,8 @@ function targetLine(ex: ActiveExercise): string {
   switch (ex.targetReason) {
     case 'increase':
       return `<div class="up">Completaste el rango: sube a ${fmtNum(ex.targetKg ?? 0, 2)} kg · ${esc(reps)} reps</div>`;
+    case 'too-heavy':
+      return `<div class="up" style="color:var(--warn)">La última vez te quedaste corto de reps: baja a ${fmtNum(ex.targetKg ?? 0, 2)} kg para entrar en el rango (${esc(reps)} reps)</div>`;
     case 'reduce':
       return `<div class="up" style="color:var(--warn)">Llevas dos sesiones sin llegar al mínimo: baja a ${fmtNum(ex.targetKg ?? 0, 2)} kg y vuelve a subir</div>`;
     case 'deload':

@@ -88,6 +88,16 @@ export interface ExerciseTarget {
 
 const roundHalf = (kg: number): number => Math.round(kg * 2) / 2;
 
+/** Redondea al escalón de peso del ejercicio (su incremento; 0,5 kg si no tiene). */
+const toStep = (kg: number, step: number, mode: 'round' | 'floor'): number => {
+  const s = step > 0 ? step : 0.5;
+  const v = (mode === 'floor' ? Math.floor(kg / s + 1e-9) : Math.round(kg / s)) * s;
+  return Math.round(v * 100) / 100;
+};
+
+/** Peso con el que se harían `reps` repeticiones según un 1RM estimado (Epley invertida). */
+const weightFor = (oneRm: number, reps: number): number => oneRm / (1 + reps / 30);
+
 /**
  * Objetivo de kg y reps para cada serie de la próxima sesión (progresión doble):
  * - todas las series previstas en el máximo del rango y con el mismo peso → sube el peso y vuelve al mínimo;
@@ -110,8 +120,23 @@ export function nextTargets(def: ExerciseDef, workouts: Workout[], sets: number,
 
   if (deload) return { reason: 'deload', kg: top, sets: each((i) => ({ kg: prevFor(i).kg, reps: min })) };
 
+  const bestRm = Math.max(...last.sets.map((s) => e1rm(s.kg, s.reps)));
   const up = suggestIncrease(def, last);
-  if (up != null) return { reason: 'increase', kg: up, sets: each(() => ({ kg: up, reps: min })) };
+  if (up != null) {
+    // Si te pasaste mucho del rango (3+ reps de media), el salto es mayor: el peso que te deja
+    // en mitad del rango según tu 1RM estimado.
+    const avgReps = last.sets.reduce((a, s) => a + s.reps, 0) / last.sets.length;
+    const mid = Math.round((min + max) / 2);
+    const kg = avgReps >= max + 3 ? Math.max(up, toStep(weightFor(bestRm, mid), def.incrementKg, 'round')) : up;
+    return { reason: 'increase', kg, sets: each(() => ({ kg, reps: min })) };
+  }
+
+  // Muy por debajo del mínimo (2+ reps): el peso que te deja en el mínimo según tu 1RM estimado.
+  const bestReps = Math.max(...last.sets.filter((s) => s.kg === top).map((s) => s.reps));
+  if (top > 0 && bestReps <= min - 2) {
+    const kg = Math.min(top, toStep(weightFor(bestRm, min), def.incrementKg, 'floor'));
+    if (kg < top && kg > 0) return { reason: 'too-heavy', kg, sets: each(() => ({ kg, reps: min })) };
+  }
 
   const before = sessions[sessions.length - 2];
   const failed = (e: WorkoutExercise) => e.sets[0] != null && e.sets[0].kg === top && e.sets[0].reps < min;

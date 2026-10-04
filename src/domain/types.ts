@@ -120,7 +120,7 @@ export interface ActiveSet {
 }
 
 /** Por qué se propone ese objetivo. */
-export type TargetReason = 'increase' | 'more-reps' | 'repeat' | 'reduce' | 'deload' | 'bodyweight-max';
+export type TargetReason = 'increase' | 'more-reps' | 'repeat' | 'reduce' | 'too-heavy' | 'deload' | 'bodyweight-max';
 
 export interface ActiveExercise {
   exerciseId: string;
@@ -145,6 +145,8 @@ export interface ActiveWorkout {
   /** epoch ms en el que acaba el descanso en curso, o null. */
   restEndsAt: number | null;
   exercises: ActiveExercise[];
+  /** epoch ms de la última serie marcada (para no contar el tiempo si se queda abierto). */
+  lastSetAt?: number;
   /** Si se está editando un entreno ya guardado: su id y su duración original. */
   editOf?: string;
   editDurationSec?: number;

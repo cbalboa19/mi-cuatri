@@ -152,3 +152,32 @@ describe('nextTargets (double progression)', async () => {
     expect(nextTargets(pull, mk([[0, 15], [0, 15]]), 2)!.reason).toBe('bodyweight-max');
   });
 });
+
+describe('nextTargets far outside the range', async () => {
+  const { nextTargets } = await import('./progression');
+  const mk = (id: string, sets: [number, number][]) => [workout('a', 1, [ex(sets, sets.length, id, id)])];
+
+  it('jumps more when the reps were way above the range', () => {
+    const legExt = { id: 'ext', name: 'Ext', sets: 3, reps: [12, 15] as [number, number], rir: '0-1', restSec: 60, incrementKg: 2.5 };
+    const t = nextTargets(legExt, mk('ext', [[12, 30], [12, 30]]), 2)!;
+    expect(t.reason).toBe('increase');
+    expect(t.sets).toEqual([{ kg: 17.5, reps: 12 }, { kg: 17.5, reps: 12 }]);
+  });
+
+  it('keeps the normal increment when only slightly above', () => {
+    const row = { id: 'row', name: 'Remo', sets: 3, reps: [6, 10] as [number, number], rir: '1-2', restSec: 150, incrementKg: 2.5 };
+    expect(nextTargets(row, mk('row', [[40, 12], [40, 10], [40, 12]]), 3)!.sets[0]).toEqual({ kg: 42.5, reps: 6 });
+  });
+
+  it('lowers the weight when the reps were well below the minimum', () => {
+    const curl = { id: 'curl', name: 'Curl femoral', sets: 3, reps: [10, 15] as [number, number], rir: '1', restSec: 90, incrementKg: 2.5 };
+    const t = nextTargets(curl, mk('curl', [[35, 6], [35, 6]]), 2)!;
+    expect(t.reason).toBe('too-heavy');
+    expect(t.sets).toEqual([{ kg: 30, reps: 10 }, { kg: 30, reps: 10 }]);
+  });
+
+  it('does not lower the weight for a one-rep miss', () => {
+    const curl = { id: 'curl', name: 'Curl femoral', sets: 3, reps: [10, 15] as [number, number], rir: '1', restSec: 90, incrementKg: 2.5 };
+    expect(nextTargets(curl, mk('curl', [[35, 9]]), 1)!.sets[0]).toEqual({ kg: 35, reps: 10 });
+  });
+});

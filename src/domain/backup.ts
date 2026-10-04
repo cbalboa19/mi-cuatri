@@ -141,7 +141,7 @@ function vWorkout(v: unknown, i: number): WorkoutRecord {
   };
 }
 
-const TARGET_REASONS: TargetReason[] = ['increase','more-reps','repeat','reduce','deload','bodyweight-max'];
+const TARGET_REASONS: TargetReason[] = ['increase','more-reps','repeat','reduce','too-heavy','deload','bodyweight-max'];
 
 function vActiveSet(v: unknown, p: string): ActiveSet {
   const o = obj(v, p);
@@ -182,6 +182,7 @@ function vActive(v: unknown): ActiveWorkout | null {
         ...(eo.targetKg !== undefined ? { targetKg: num(eo.targetKg, `${ep}.targetKg`) } : {}),
       };
     }),
+    ...(o.lastSetAt !== undefined ? { lastSetAt: num(o.lastSetAt, `${p}.lastSetAt`) } : {}),
     ...(o.editOf !== undefined ? { editOf: str(o.editOf, `${p}.editOf`) } : {}),
     ...(o.editDurationSec !== undefined ? { editDurationSec: num(o.editDurationSec, `${p}.editDurationSec`) } : {}),
   };
