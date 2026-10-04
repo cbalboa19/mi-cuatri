@@ -74,6 +74,9 @@ export function trackedExercises(routines: RoutineDef[], workouts: Workout[]): T
   return out;
 }
 
+/** Fase del plan para calcular objetivos. */
+export type TargetMode = 'normal' | 'deload' | 'reentry';
+
 export interface SetTarget {
   kg: number;
   reps: number;
@@ -103,10 +106,11 @@ const weightFor = (oneRm: number, reps: number): number => oneRm / (1 + reps / 3
  * - todas las series previstas en el máximo del rango y con el mismo peso → sube el peso y vuelve al mínimo;
  * - si no → mismo peso y +1 rep por serie (sin pasar del máximo; si no llegó al mínimo, el mínimo);
  * - dos sesiones seguidas sin llegar al mínimo en la primera serie con el mismo peso → baja un 10 %;
- * - semana de descarga → mismos pesos y el mínimo de reps.
+ * - semana de descarga → mismos pesos y el mínimo de reps;
+ * - semanas de reentrada → nunca baja el peso (las reps bajas son a propósito, con reps en la recámara).
  * Null si nunca se ha hecho el ejercicio.
  */
-export function nextTargets(def: ExerciseDef, workouts: Workout[], sets: number, deload = false): ExerciseTarget | null {
+export function nextTargets(def: ExerciseDef, workouts: Workout[], sets: number, mode: TargetMode = 'normal'): ExerciseTarget | null {
   const sessions = exerciseSessions(def.id, workouts)
     .map((s) => s.exercise)
     .filter((e) => e.sets.length);
@@ -118,7 +122,7 @@ export function nextTargets(def: ExerciseDef, workouts: Workout[], sets: number,
   const prevFor = (i: number) => last.sets[i] ?? last.sets[last.sets.length - 1]!;
   const each = (fn: (i: number) => SetTarget) => Array.from({ length: n }, (_, i) => fn(i));
 
-  if (deload) return { reason: 'deload', kg: top, sets: each((i) => ({ kg: prevFor(i).kg, reps: min })) };
+  if (mode === 'deload') return { reason: 'deload', kg: top, sets: each((i) => ({ kg: prevFor(i).kg, reps: min })) };
 
   const bestRm = Math.max(...last.sets.map((s) => e1rm(s.kg, s.reps)));
   const up = suggestIncrease(def, last);
@@ -133,14 +137,14 @@ export function nextTargets(def: ExerciseDef, workouts: Workout[], sets: number,
 
   // Muy por debajo del mínimo (2+ reps): el peso que te deja en el mínimo según tu 1RM estimado.
   const bestReps = Math.max(...last.sets.filter((s) => s.kg === top).map((s) => s.reps));
-  if (top > 0 && bestReps <= min - 2) {
+  if (mode !== 'reentry' && top > 0 && bestReps <= min - 2) {
     const kg = Math.min(top, toStep(weightFor(bestRm, min), def.incrementKg, 'floor'));
     if (kg < top && kg > 0) return { reason: 'too-heavy', kg, sets: each(() => ({ kg, reps: min })) };
   }
 
   const before = sessions[sessions.length - 2];
   const failed = (e: WorkoutExercise) => e.sets[0] != null && e.sets[0].kg === top && e.sets[0].reps < min;
-  if (top > 0 && before && failed(last) && failed(before)) {
+  if (mode !== 'reentry' && top > 0 && before && failed(last) && failed(before)) {
     const kg = roundHalf(top * 0.9);
     return { reason: 'reduce', kg, sets: each(() => ({ kg, reps: min })) };
   }

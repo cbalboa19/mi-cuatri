@@ -8,6 +8,7 @@ import { toSchedule, type Schedule } from '../domain/schedule';
 import { parseBackupText, backupFileName, type Backup } from '../domain/backup';
 import { resolveConfig, type Config, type UserConfig } from '../domain/config';
 import { adjustSets, phaseFor } from '../domain/plan';
+import type { TargetMode } from '../domain/progression';
 import type { ActiveWorkout, AppData, CheckScope, ExerciseDef, Workout } from '../domain/types';
 import {
   addSet,
@@ -226,11 +227,16 @@ export class Store {
     return phaseFor(now, this.data.settings.examMode, this.cfg.planStart, examDays);
   }
 
+  /** Cómo calcular los objetivos de kg y reps según la fase del plan. */
+  private targetMode(now: Date): TargetMode {
+    const key = this.phase(now).key;
+    return key === 'deload' ? 'deload' : key === 're' ? 'reentry' : 'normal';
+  }
+
   startWorkout(routineId: string, now: Date): void {
     const routine = this.cfg.routines.find((r) => r.id === routineId);
     if (!routine) return;
-    const deload = this.phase(now).key === 'deload';
-    this.data.active = createActiveWorkout(routine, this.data.workouts, this.phaseSets(now), now.getTime(), deload);
+    this.data.active = createActiveWorkout(routine, this.data.workouts, this.phaseSets(now), now.getTime(), this.targetMode(now));
     this.saveActive();
   }
 
@@ -255,8 +261,7 @@ export class Store {
     const active = this.data.active;
     if (!active) return;
     const n = active.editOf ? sets : adjustSets(sets, this.phaseSets(new Date()));
-    const deload = !active.editOf && this.phase(new Date()).key === 'deload';
-    active.exercises.push(createActiveExercise(def, this.data.workouts, n, deload));
+    active.exercises.push(createActiveExercise(def, this.data.workouts, n, active.editOf ? 'normal' : this.targetMode(new Date())));
     this.saveActive();
     if (alsoToRoutine && this.cfg.routines.some((r) => r.id === active.routineId)) {
       this.updateConfig(['routines'], (c) => {

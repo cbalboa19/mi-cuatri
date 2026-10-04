@@ -1,7 +1,7 @@
 // Ciclo de vida de un entreno: crear, marcar series, añadir/quitar series y terminar.
 
 import { adjustSets } from './plan';
-import { lastSessionFor, nextTargets } from './progression';
+import { lastSessionFor, nextTargets, type TargetMode } from './progression';
 import type { ActiveExercise, ActiveSet, ActiveWorkout, ExerciseDef, RoutineDef, SetsRule, Workout } from './types';
 
 /** "62,5" o "62.5" → 62.5. Vacío o inválido → NaN. */
@@ -14,11 +14,11 @@ const numOrNull = (s: string): number | null => {
 
 /**
  * Ejercicio listo para entrenar: series según la fase, valores de la última sesión y el objetivo
- * de kg y reps de cada serie. `deload` = semana de descarga (mismos pesos, reps fáciles).
+ * de kg y reps de cada serie según la fase (descarga, reentrada o normal).
  */
-export function createActiveExercise(def: ExerciseDef, history: Workout[], sets: number, deload = false): ActiveExercise {
+export function createActiveExercise(def: ExerciseDef, history: Workout[], sets: number, mode: TargetMode = 'normal'): ActiveExercise {
   const last = lastSessionFor(def.id, history);
-  const target = nextTargets(def, history, sets, deload);
+  const target = nextTargets(def, history, sets, mode);
   return {
     exerciseId: def.id,
     name: def.name,
@@ -48,7 +48,7 @@ export function createActiveWorkout(
   history: Workout[],
   setsRule: SetsRule,
   now: number,
-  deload = false,
+  mode: TargetMode = 'normal',
 ): ActiveWorkout {
   return {
     id: `w_${now}`,
@@ -56,7 +56,7 @@ export function createActiveWorkout(
     routineName: routine.name,
     startedAt: now,
     restEndsAt: null,
-    exercises: routine.exercises.map((def) => createActiveExercise(def, history, adjustSets(def.sets, setsRule), deload)),
+    exercises: routine.exercises.map((def) => createActiveExercise(def, history, adjustSets(def.sets, setsRule), mode)),
   };
 }
 

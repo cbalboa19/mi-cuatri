@@ -123,7 +123,7 @@ describe('targets in the active workout', () => {
   });
 
   it('marks a deload session', () => {
-    const a = createActiveWorkout(routine, history, { kind: 'half' }, 1000, true);
+    const a = createActiveWorkout(routine, history, { kind: 'half' }, 1000, 'deload');
     expect(a.exercises[0]?.targetReason).toBe('deload');
   });
 

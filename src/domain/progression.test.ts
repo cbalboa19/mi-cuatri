@@ -140,7 +140,7 @@ describe('nextTargets (double progression)', async () => {
   });
 
   it('keeps the weights with easy reps in a deload week', () => {
-    const t = nextTargets(def, [w('a', 1, [[70, 8], [70, 8]])], 2, true)!;
+    const t = nextTargets(def, [w('a', 1, [[70, 8], [70, 8]])], 2, 'deload')!;
     expect(t.reason).toBe('deload');
     expect(t.sets).toEqual([{ kg: 70, reps: 5 }, { kg: 70, reps: 5 }]);
   });
@@ -179,5 +179,26 @@ describe('nextTargets far outside the range', async () => {
   it('does not lower the weight for a one-rep miss', () => {
     const curl = { id: 'curl', name: 'Curl femoral', sets: 3, reps: [10, 15] as [number, number], rir: '1', restSec: 90, incrementKg: 2.5 };
     expect(nextTargets(curl, mk('curl', [[35, 9]]), 1)!.sets[0]).toEqual({ kg: 35, reps: 10 });
+  });
+});
+
+describe('nextTargets in reentry weeks', async () => {
+  const { nextTargets } = await import('./progression');
+  const curl = { id: 'curl', name: 'Curl femoral', sets: 3, reps: [10, 15] as [number, number], rir: '1', restSec: 90, incrementKg: 2.5 };
+  const mk = (...sessions: [number, number][][]) => sessions.map((s, i) => workout(`w${i}`, i, [ex(s, s.length, 'curl', 'Curl femoral')]));
+
+  it('never lowers the weight: keeps it and asks for the minimum reps', () => {
+    const t = nextTargets(curl, mk([[35, 6], [35, 6]]), 2, 'reentry')!;
+    expect(t.sets).toEqual([{ kg: 35, reps: 10 }, { kg: 35, reps: 10 }]);
+    expect(nextTargets(curl, mk([[35, 6], [35, 6]]), 2)!.reason).toBe('too-heavy'); // fuera de la reentrada sí baja
+  });
+
+  it('does not apply the 10% drop either', () => {
+    const t = nextTargets(curl, mk([[35, 9]], [[35, 9]]), 1, 'reentry')!;
+    expect(t.sets[0]).toEqual({ kg: 35, reps: 10 });
+  });
+
+  it('still raises the weight when the range was completed', () => {
+    expect(nextTargets(curl, mk([[35, 15], [35, 15]]), 2, 'reentry')!.reason).toBe('increase');
   });
 });
