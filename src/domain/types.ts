@@ -113,8 +113,14 @@ export interface ActiveSet {
   reps: string;
   prevKg: number | null;
   prevReps: number | null;
+  /** Objetivo calculado para esta serie (progresión doble). */
+  targetKg?: number | null;
+  targetReps?: number | null;
   done: boolean;
 }
+
+/** Por qué se propone ese objetivo. */
+export type TargetReason = 'increase' | 'more-reps' | 'repeat' | 'reduce' | 'deload' | 'bodyweight-max';
 
 export interface ActiveExercise {
   exerciseId: string;
@@ -126,6 +132,9 @@ export interface ActiveExercise {
   reps?: [number, number];
   rir?: string;
   incrementKg?: number;
+  /** Motivo del objetivo y peso de trabajo propuesto. */
+  targetReason?: TargetReason;
+  targetKg?: number;
 }
 
 export interface ActiveWorkout {

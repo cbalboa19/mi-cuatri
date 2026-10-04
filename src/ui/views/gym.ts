@@ -71,6 +71,28 @@ function addExerciseForm(store: Store): string {
   </form></div></details>`;
 }
 
+/** Línea con el objetivo de hoy del ejercicio (calculado con la sesión anterior). */
+function targetLine(ex: ActiveExercise): string {
+  const ts = ex.sets.filter((s) => s.targetReps != null);
+  if (!ex.targetReason || !ts.length) return '';
+  const reps = ts.map((s) => s.targetReps).join(' · ');
+  const kgs = [...new Set(ts.map((s) => s.targetKg ?? 0))];
+  const kgTxt = kgs.every((k) => k === 0) ? '' : kgs.length === 1 ? `${fmtNum(kgs[0]!, 2)} kg × ` : `${fmtNum(Math.min(...kgs), 2)}-${fmtNum(Math.max(...kgs), 2)} kg × `;
+  const base = `Objetivo: ${kgTxt}${reps} reps`;
+  switch (ex.targetReason) {
+    case 'increase':
+      return `<div class="up">Completaste el rango: sube a ${fmtNum(ex.targetKg ?? 0, 2)} kg · ${esc(reps)} reps</div>`;
+    case 'reduce':
+      return `<div class="up" style="color:var(--warn)">Llevas dos sesiones sin llegar al mínimo: baja a ${fmtNum(ex.targetKg ?? 0, 2)} kg y vuelve a subir</div>`;
+    case 'deload':
+      return `<div class="meta">Descarga: mismo peso, reps cómodas · ${esc(base)}</div>`;
+    case 'bodyweight-max':
+      return `<div class="up">Rango completado: haz la bajada en 3 s para que cueste más</div>`;
+    default:
+      return `<div class="meta">${esc(base)}</div>`;
+  }
+}
+
 function renderWorkout(store: Store): string {
   const active = store.active!;
   const editing = !!active.editOf;
@@ -78,11 +100,12 @@ function renderWorkout(store: Store): string {
   const exs = active.exercises
     .map((ex, ei) => {
       const info = exerciseInfo(store, ex);
-      const up = editing ? null : suggestIncrease(info, lastSessionFor(ex.exerciseId, store.data.workouts));
+      // Entrenos de antes de los objetivos: se mantiene la sugerencia simple de subir peso.
+      const up = editing || ex.targetReason ? null : suggestIncrease(info, lastSessionFor(ex.exerciseId, store.data.workouts));
       const rows = ex.sets
         .map((s, si) => {
           const prev = s.prevKg != null || s.prevReps != null ? `${plain(s.prevKg)}×${plain(s.prevReps)}` : '-';
-          return `<tr class="${s.done ? 'ok' : ''}"><td>${si + 1}</td><td class="prev">${esc(prev)}</td><td><input inputmode="decimal" aria-label="Kg serie ${si + 1}" placeholder="${esc(plain(s.prevKg))}" value="${esc(s.kg)}" data-in="kg" data-e="${ei}" data-s="${si}"></td><td><input inputmode="numeric" aria-label="Reps serie ${si + 1}" placeholder="${esc(plain(s.prevReps))}" value="${esc(s.reps)}" data-in="reps" data-e="${ei}" data-s="${si}"></td><td><button class="tick" aria-label="Marcar serie ${si + 1}" data-tick data-e="${ei}" data-s="${si}"></button></td></tr>`;
+          return `<tr class="${s.done ? 'ok' : ''}"><td>${si + 1}</td><td class="prev">${esc(prev)}</td><td><input inputmode="decimal" aria-label="Kg serie ${si + 1}" placeholder="${esc(plain(s.targetKg ?? s.prevKg))}" value="${esc(s.kg)}" data-in="kg" data-e="${ei}" data-s="${si}"></td><td><input inputmode="numeric" aria-label="Reps serie ${si + 1}" placeholder="${esc(plain(s.targetReps ?? s.prevReps))}" value="${esc(s.reps)}" data-in="reps" data-e="${ei}" data-s="${si}"></td><td><button class="tick" aria-label="Marcar serie ${si + 1}" data-tick data-e="${ei}" data-s="${si}"></button></td></tr>`;
         })
         .join('');
       const meta = info.reps[1] ? `${info.reps[0]}-${info.reps[1]} reps · RIR ${esc(info.rir)} · descanso ${fmtClock(info.restSec)}` : `descanso ${fmtClock(info.restSec)}`;
@@ -91,7 +114,7 @@ function renderWorkout(store: Store): string {
         <div class="row"><span class="sub">Descanso</span><input inputmode="numeric" data-exrest="${ei}" value="${info.restSec}" aria-label="Descanso en segundos"><span class="sub">s</span>${inRoutine ? `<button class="addset" data-exrest-save="${ei}">Guardar en la rutina</button>` : ''}</div>
         <div class="row">${ei > 0 ? `<button class="addset" data-exmove="${ei}" data-dir="-1">↑ Subir</button>` : ''}${ei < n - 1 ? `<button class="addset" data-exmove="${ei}" data-dir="1">↓ Bajar</button>` : ''}<button class="addset" style="color:#D93025" data-exremove="${ei}">Quitar ejercicio</button></div>
       </details>`;
-      return `<div class="ex"><h4>${esc(ex.name)}</h4><div class="meta">${meta}</div>${up != null ? `<div class="up">Completaste el rango: prueba ${fmtNum(up, 1)} kg</div>` : ''}<table class="sets"><thead><tr><th>Serie</th><th>Anterior</th><th>Kg</th><th>Reps</th><th></th></tr></thead><tbody>${rows}</tbody></table><div class="row" style="justify-content:space-between"><button class="addset" data-addset="${ei}">+ Añadir serie</button>${ex.sets.length > 1 ? `<button class="addset" style="color:var(--muted)" data-delset="${ei}">Quitar serie</button>` : ''}</div>${opts}</div>`;
+      return `<div class="ex"><h4>${esc(ex.name)}</h4><div class="meta">${meta}</div>${editing ? '' : targetLine(ex)}${up != null ? `<div class="up">Completaste el rango: prueba ${fmtNum(up, 1)} kg</div>` : ''}<table class="sets"><thead><tr><th>Serie</th><th>Anterior</th><th>Kg</th><th>Reps</th><th></th></tr></thead><tbody>${rows}</tbody></table><div class="row" style="justify-content:space-between"><button class="addset" data-addset="${ei}">+ Añadir serie</button>${ex.sets.length > 1 ? `<button class="addset" style="color:var(--muted)" data-delset="${ei}">Quitar serie</button>` : ''}</div>${opts}</div>`;
     })
     .join('');
   const head = editing

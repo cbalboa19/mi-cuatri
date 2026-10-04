@@ -229,7 +229,8 @@ export class Store {
   startWorkout(routineId: string, now: Date): void {
     const routine = this.cfg.routines.find((r) => r.id === routineId);
     if (!routine) return;
-    this.data.active = createActiveWorkout(routine, this.data.workouts, this.phaseSets(now), now.getTime());
+    const deload = this.phase(now).key === 'deload';
+    this.data.active = createActiveWorkout(routine, this.data.workouts, this.phaseSets(now), now.getTime(), deload);
     this.saveActive();
   }
 
@@ -254,7 +255,8 @@ export class Store {
     const active = this.data.active;
     if (!active) return;
     const n = active.editOf ? sets : adjustSets(sets, this.phaseSets(new Date()));
-    active.exercises.push(createActiveExercise(def, this.data.workouts, n));
+    const deload = !active.editOf && this.phase(new Date()).key === 'deload';
+    active.exercises.push(createActiveExercise(def, this.data.workouts, n, deload));
     this.saveActive();
     if (alsoToRoutine && this.cfg.routines.some((r) => r.id === active.routineId)) {
       this.updateConfig(['routines'], (c) => {

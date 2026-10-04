@@ -11,6 +11,7 @@ import type {
   AppData,
   CheckScope,
   Settings,
+  TargetReason,
   Workout,
   WorkoutExercise,
 } from './types';
@@ -140,6 +141,8 @@ function vWorkout(v: unknown, i: number): WorkoutRecord {
   };
 }
 
+const TARGET_REASONS: TargetReason[] = ['increase','more-reps','repeat','reduce','deload','bodyweight-max'];
+
 function vActiveSet(v: unknown, p: string): ActiveSet {
   const o = obj(v, p);
   return {
@@ -147,6 +150,8 @@ function vActiveSet(v: unknown, p: string): ActiveSet {
     reps: str(o.reps, `${p}.reps`),
     prevKg: numOrNull(o.prevKg, `${p}.prevKg`),
     prevReps: numOrNull(o.prevReps, `${p}.prevReps`),
+    ...(o.targetKg !== undefined ? { targetKg: numOrNull(o.targetKg, `${p}.targetKg`) } : {}),
+    ...(o.targetReps !== undefined ? { targetReps: numOrNull(o.targetReps, `${p}.targetReps`) } : {}),
     done: bool(o.done, `${p}.done`),
   };
 }
@@ -173,6 +178,8 @@ function vActive(v: unknown): ActiveWorkout | null {
         ...(eo.reps !== undefined ? { reps: vRange(eo.reps, `${ep}.reps`) } : {}),
         ...(eo.rir !== undefined ? { rir: str(eo.rir, `${ep}.rir`) } : {}),
         ...(eo.incrementKg !== undefined ? { incrementKg: num(eo.incrementKg, `${ep}.incrementKg`) } : {}),
+        ...(typeof eo.targetReason === 'string' && TARGET_REASONS.includes(eo.targetReason as TargetReason) ? { targetReason: eo.targetReason as TargetReason } : {}),
+        ...(eo.targetKg !== undefined ? { targetKg: num(eo.targetKg, `${ep}.targetKg`) } : {}),
       };
     }),
     ...(o.editOf !== undefined ? { editOf: str(o.editOf, `${p}.editOf`) } : {}),

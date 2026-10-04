@@ -1,7 +1,7 @@
 // Ciclo de vida de un entreno: crear, marcar series, añadir/quitar series y terminar.
 
 import { adjustSets } from './plan';
-import { lastSessionFor } from './progression';
+import { lastSessionFor, nextTargets } from './progression';
 import type { ActiveExercise, ActiveSet, ActiveWorkout, ExerciseDef, RoutineDef, SetsRule, Workout } from './types';
 
 /** "62,5" o "62.5" → 62.5. Vacío o inválido → NaN. */
@@ -12,9 +12,13 @@ const numOrNull = (s: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Ejercicio listo para entrenar: series según la fase y valores de la última sesión. */
-export function createActiveExercise(def: ExerciseDef, history: Workout[], sets: number): ActiveExercise {
+/**
+ * Ejercicio listo para entrenar: series según la fase, valores de la última sesión y el objetivo
+ * de kg y reps de cada serie. `deload` = semana de descarga (mismos pesos, reps fáciles).
+ */
+export function createActiveExercise(def: ExerciseDef, history: Workout[], sets: number, deload = false): ActiveExercise {
   const last = lastSessionFor(def.id, history);
+  const target = nextTargets(def, history, sets, deload);
   return {
     exerciseId: def.id,
     name: def.name,
@@ -23,9 +27,18 @@ export function createActiveExercise(def: ExerciseDef, history: Workout[], sets:
     reps: [def.reps[0], def.reps[1]],
     rir: def.rir,
     incrementKg: def.incrementKg,
+    ...(target ? { targetReason: target.reason, targetKg: target.kg } : {}),
     sets: Array.from({ length: Math.max(1, sets) }, (_, i): ActiveSet => {
       const p = last ? (last.sets[i] ?? last.sets[last.sets.length - 1] ?? null) : null;
-      return { kg: '', reps: '', prevKg: p ? p.kg : null, prevReps: p ? p.reps : null, done: false };
+      const t = target?.sets[i];
+      return {
+        kg: '',
+        reps: '',
+        prevKg: p ? p.kg : null,
+        prevReps: p ? p.reps : null,
+        ...(t ? { targetKg: t.kg, targetReps: t.reps } : {}),
+        done: false,
+      };
     }),
   };
 }
@@ -35,6 +48,7 @@ export function createActiveWorkout(
   history: Workout[],
   setsRule: SetsRule,
   now: number,
+  deload = false,
 ): ActiveWorkout {
   return {
     id: `w_${now}`,
@@ -42,7 +56,7 @@ export function createActiveWorkout(
     routineName: routine.name,
     startedAt: now,
     restEndsAt: null,
-    exercises: routine.exercises.map((def) => createActiveExercise(def, history, adjustSets(def.sets, setsRule))),
+    exercises: routine.exercises.map((def) => createActiveExercise(def, history, adjustSets(def.sets, setsRule), deload)),
   };
 }
 
@@ -82,17 +96,19 @@ export function toEditable(w: Workout, defs: (exerciseId: string) => ExerciseDef
 export type ToggleResult = { ok: true; completed: boolean } | { ok: false; reason: 'missing-reps' };
 
 /**
- * Marca o desmarca una serie. Al marcarla, los campos vacíos se rellenan con los de la sesión
- * anterior; si siguen faltando las repeticiones no se marca.
+ * Marca o desmarca una serie. Al marcarla, los campos vacíos se rellenan con el objetivo de la
+ * serie (o, si no hay, con la sesión anterior); si siguen faltando las repeticiones no se marca.
  */
 export function toggleSet(set: ActiveSet): ToggleResult {
   if (set.done) {
     set.done = false;
     return { ok: true, completed: false };
   }
-  const reps = set.reps !== '' ? set.reps : set.prevReps != null ? String(set.prevReps) : '';
+  const suggestedReps = set.targetReps ?? set.prevReps;
+  const suggestedKg = set.targetKg ?? set.prevKg;
+  const reps = set.reps !== '' ? set.reps : suggestedReps != null ? String(suggestedReps) : '';
   if (reps === '') return { ok: false, reason: 'missing-reps' };
-  if (set.kg === '' && set.prevKg != null) set.kg = String(set.prevKg);
+  if (set.kg === '' && suggestedKg != null) set.kg = String(suggestedKg);
   set.reps = reps;
   set.done = true;
   return { ok: true, completed: true };
@@ -105,6 +121,10 @@ export function addSet(ex: ActiveExercise): void {
     reps: '',
     prevKg: l ? (numOrNull(l.kg) ?? l.prevKg) : null,
     prevReps: l ? (numOrNull(l.reps) ?? l.prevReps) : null,
+    // La serie extra apunta a lo que hiciste en la anterior (o a su objetivo).
+    ...(l && (l.targetKg != null || l.kg !== '')
+      ? { targetKg: numOrNull(l.kg) ?? l.targetKg ?? null, targetReps: numOrNull(l.reps) ?? l.targetReps ?? null }
+      : {}),
     done: false,
   });
 }

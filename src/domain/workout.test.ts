@@ -72,7 +72,7 @@ describe('add/remove sets', () => {
   it('adds a set using the last one as reference', () => {
     const ex = { exerciseId: 'b', name: 'B', plannedSets: 1, sets: [set({ kg: '60', reps: '', prevKg: 55, prevReps: 10 })] };
     addSet(ex);
-    expect(ex.sets[1]).toEqual(set({ prevKg: 60, prevReps: 10 }));
+    expect(ex.sets[1]).toEqual(set({ prevKg: 60, prevReps: 10, targetKg: 60, targetReps: null }));
   });
 
   it('never removes the last set', () => {
@@ -108,5 +108,28 @@ describe('finishWorkout', () => {
   it('parses comma decimals', () => {
     expect(parseNum('64,5')).toBe(64.5);
     expect(parseNum('')).toBeNaN();
+  });
+});
+
+describe('targets in the active workout', () => {
+  it('fills targets from history and uses them when ticking an empty set', () => {
+    const a = createActiveWorkout(routine, history, { kind: 'full' }, 1000);
+    const bench = a.exercises[0]!;
+    expect(bench.targetReason).toBe('more-reps');
+    expect(bench.sets[0]).toMatchObject({ targetKg: 70, targetReps: 8 });
+    expect(bench.sets[1]).toMatchObject({ targetKg: 72.5, targetReps: 7 });
+    expect(toggleSet(bench.sets[1]!)).toEqual({ ok: true, completed: true });
+    expect(bench.sets[1]).toMatchObject({ kg: '72.5', reps: '7', done: true });
+  });
+
+  it('marks a deload session', () => {
+    const a = createActiveWorkout(routine, history, { kind: 'half' }, 1000, true);
+    expect(a.exercises[0]?.targetReason).toBe('deload');
+  });
+
+  it('an extra set aims at what was just done', () => {
+    const ex = { exerciseId: 'b', name: 'B', plannedSets: 1, sets: [set({ kg: '80', reps: '6', targetKg: 77.5, targetReps: 6 })] };
+    addSet(ex);
+    expect(ex.sets[1]).toMatchObject({ targetKg: 80, targetReps: 6 });
   });
 });

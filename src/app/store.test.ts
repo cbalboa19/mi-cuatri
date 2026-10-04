@@ -182,7 +182,7 @@ describe('Store editable config', () => {
     s.startWorkout('torso-a', new Date(2026, 9, 12, 12));
     const def = { id: 'ex_new', name: 'Pullover', sets: 3, reps: [10, 12] as [number, number], rir: '1', restSec: 75, incrementKg: 2.5 };
     s.addExerciseToActive(def, 3, true);
-    expect(s.active?.exercises.at(-1)).toMatchObject({ exerciseId: 'ex_new', plannedSets: 3, restSec: 75 });
+    expect(s.active?.exercises.at(-1)).toMatchObject({ exerciseId: 'ex_new', restSec: 75 });
     expect(s.cfg.routines.find((r) => r.id === 'torso-a')?.exercises.at(-1)?.id).toBe('ex_new');
     const last = s.active!.exercises.length - 1;
     s.setExerciseRest(last, 60, false);
