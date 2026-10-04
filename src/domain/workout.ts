@@ -133,6 +133,18 @@ export function removeSet(ex: ActiveExercise): void {
   if (ex.sets.length > 1) ex.sets.pop();
 }
 
+/** Si se termina el entreno más de 20 min después de la última serie, se deja de contar ahí (+2 min). */
+export const IDLE_FINISH_MS = 20 * 60_000;
+const COOLDOWN_MS = 2 * 60_000;
+
+function durationSec(active: ActiveWorkout, now: number): number {
+  if (active.editDurationSec != null) return active.editDurationSec;
+  const last = active.lastSetAt;
+  const idle = last != null && last >= active.startedAt && now - last > IDLE_FINISH_MS;
+  const end = idle ? last + COOLDOWN_MS : now;
+  return Math.max(0, Math.floor((end - active.startedAt) / 1000));
+}
+
 /** Convierte el entreno en curso en uno guardado. Null si no hay ninguna serie marcada. */
 export function finishWorkout(active: ActiveWorkout, now: number): Workout | null {
   const exercises = active.exercises
@@ -151,7 +163,7 @@ export function finishWorkout(active: ActiveWorkout, now: number): Workout | nul
     routineId: active.routineId,
     routineName: active.routineName,
     startedAt: active.startedAt,
-    durationSec: active.editDurationSec ?? Math.max(0, Math.floor((now - active.startedAt) / 1000)),
+    durationSec: durationSec(active, now),
     exercises,
   };
 }

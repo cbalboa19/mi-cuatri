@@ -133,3 +133,13 @@ describe('targets in the active workout', () => {
     expect(ex.sets[1]).toMatchObject({ targetKg: 80, targetReps: 6 });
   });
 });
+
+describe('workout duration', () => {
+  it('stops counting at the last set when the workout was left open', () => {
+    const a = createActiveWorkout(routine, [], { kind: 'full' }, 0);
+    a.exercises[0]!.sets[0] = set({ kg: '60', reps: '8', done: true });
+    a.lastSetAt = 60 * 60_000; // última serie al cabo de 1 h
+    expect(finishWorkout(a, 3 * 60 * 60_000)?.durationSec).toBe(62 * 60); // cerrado a las 3 h → 1 h + 2 min
+    expect(finishWorkout(a, 70 * 60_000)?.durationSec).toBe(70 * 60); // cerrado poco después → tiempo real
+  });
+});

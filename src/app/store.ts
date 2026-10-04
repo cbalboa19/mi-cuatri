@@ -301,6 +301,7 @@ export class Store {
     const set = this.data.active?.exercises[ei]?.sets[si];
     if (!set) return null;
     const r = toggleSet(set);
+    if (r.ok && r.completed && this.data.active) this.data.active.lastSetAt = Date.now();
     if (r.ok) this.saveActive();
     return r;
   }
